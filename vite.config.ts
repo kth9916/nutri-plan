@@ -97,13 +97,13 @@ function vitePluginManusDebugCollector(): Plugin {
 }
 
 // =============================================================================
-// Vite Main Configuration
+// Vite Configuration
 // =============================================================================
 export default defineConfig({
-  // root를 프로젝트 루트(최상단)로 변경하여 모든 alias 해석의 기준을 통일합니다.
+  // 1. Root를 프로젝트 최상단으로 설정하여 shared 폴더 접근 허용
   root: PROJECT_ROOT,
 
-  // public 폴더 위치 명시
+  // 2. public 디렉토리 위치 명시
   publicDir: path.resolve(PROJECT_ROOT, "client/public"),
 
   plugins: [
@@ -120,17 +120,18 @@ export default defineConfig({
       "@shared": path.resolve(PROJECT_ROOT, "shared"),
       "@assets": path.resolve(PROJECT_ROOT, "attached_assets"),
     },
+    // 확장자 자동 해석 추가
     extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"],
   },
 
   build: {
-    // 빌드 결과물 경로
+    // 3. 빌드 결과물을 dist/public에 생성
     outDir: path.resolve(PROJECT_ROOT, "dist/public"),
     emptyOutDir: true,
     minify: "terser",
     sourcemap: false,
     rollupOptions: {
-      // index.html이 client 폴더 안에 있음을 명시적으로 지정
+      // 4. index.html의 위치를 명시적으로 지정
       input: path.resolve(PROJECT_ROOT, "client/index.html"),
       output: {
         manualChunks: {
@@ -151,7 +152,7 @@ export default defineConfig({
     host: true,
     fs: {
       strict: true,
-      allow: [PROJECT_ROOT],
+      allow: [PROJECT_ROOT], // 최상위 폴더 접근 허용
     },
   },
 });
