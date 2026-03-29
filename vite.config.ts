@@ -101,7 +101,7 @@ function vitePluginManusDebugCollector(): Plugin {
 // =============================================================================
 export default defineConfig({
   // 1. Root를 프로젝트 최상단으로 설정하여 shared 폴더 접근 허용
-  root: PROJECT_ROOT,
+  root: path.resolve(PROJECT_ROOT, "client"),
 
   // 2. public 디렉토리 위치 명시
   publicDir: path.resolve(PROJECT_ROOT, "client/public"),
@@ -116,12 +116,11 @@ export default defineConfig({
 
   resolve: {
     alias: {
+      // PROJECT_ROOT를 기준으로 경로를 확실히 잡습니다.
       "@": path.resolve(PROJECT_ROOT, "client/src"),
       "@shared": path.resolve(PROJECT_ROOT, "shared"),
       "@assets": path.resolve(PROJECT_ROOT, "attached_assets"),
     },
-    // 확장자 자동 해석 추가
-    extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"],
   },
 
   build: {
