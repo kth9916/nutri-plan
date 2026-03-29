@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1774786537820,
+      "tag": "0000_petite_surge",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1774786697597,
+      "tag": "0001_fat_mysterio",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774788460164,
+      "tag": "0002_omniscient_lester",
+      "breakpoints": true
+    }
+  ]
+}

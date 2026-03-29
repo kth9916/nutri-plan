@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `meal_plan_usage` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`year` int NOT NULL,\n\t`month` int NOT NULL,\n\t`generationCount` int NOT NULL DEFAULT 0,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `meal_plan_usage_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `meal_days` ADD `candidates` json;\nALTER TABLE `meal_days` ADD `selectedCandidateIndex` int DEFAULT 0 NOT NULL;\nALTER TABLE `meal_plan_usage` ADD CONSTRAINT `meal_plan_usage_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user Zpby1rFu8N4TevY.root --database GbedzQSwhAWuGuvTbtYSsk --execute CREATE TABLE `meal_plan_usage` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`year` int NOT NULL,\n\t`month` int NOT NULL,\n\t`generationCount` int NOT NULL DEFAULT 0,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `meal_plan_usage_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `meal_days` ADD `candidates` json;\nALTER TABLE `meal_days` ADD `selectedCandidateIndex` int DEFAULT 0 NOT NULL;\nALTER TABLE `meal_plan_usage` ADD CONSTRAINT `meal_plan_usage_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2808
+}

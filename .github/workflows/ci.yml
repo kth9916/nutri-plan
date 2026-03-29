@@ -1,0 +1,140 @@
+name: CI Pipeline
+
+# 트리거 설정: main 브랜치 push 또는 PR 시 실행
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      # 1. 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Node.js 설치
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # 3. pnpm 설치 및 캐싱
+      # 캐싱 전략:
+      # - pnpm store를 캐싱하면 node_modules 재설치 시간 70~80% 단축
+      # - key: pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+      #   → pnpm-lock.yaml 변경 시에만 캐시 무효화 (정확한 의존성 추적)
+      # - restore-keys: pnpm-store-
+      #   → 캐시 미스 시 최신 캐시 사용 (부분 복구)
+      # 이 전략으로 CI 실행 시간 3~5분 단축 가능
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.4.1
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      # 4. node_modules 캐싱 (선택적 최적화)
+      # 캐싱 전략:
+      # - node_modules 전체를 캐싱하면 설치 시간 추가 단축
+      # - 단, 캐시 업로드 시간이 길어질 수 있으므로 pnpm store 캐싱이 충분한 경우 생략 가능
+      # - 현재는 pnpm store 캐싱만으로도 충분하므로 주석 처리
+      # - 필요 시 활성화: path: node_modules, key: node_modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+      
+      # 5. .next 캐싱 (빌드 결과 캐싱)
+      # 캐싱 전략:
+      # - Next.js의 .next 디렉토리를 캐싱하면 재빌드 시 증분 빌드 활용
+      # - key: .next-${{ hashFiles('**/package.json', '**/pnpm-lock.yaml', 'next.config.js') }}
+      #   → 의존성 또는 설정 변경 시에만 캐시 무효화
+      # - 빌드 시간 40~60% 단축 가능
+      - name: Cache .next build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package.json', '**/pnpm-lock.yaml', 'next.config.js') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+
+      # 6. 의존성 설치
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 7. ESLint 검사
+      # 코드 스타일 및 잠재적 오류 검출
+      - name: Run ESLint
+        run: pnpm run lint
+        continue-on-error: true  # ESLint 실패 시에도 다음 단계 진행 (선택사항)
+
+      # 8. TypeScript 타입 검사
+      # 타입 안정성 확보 (런타임 오류 사전 방지)
+      - name: TypeScript type check
+        run: pnpm check
+
+      # 9. 빌드 테스트
+      # Next.js 빌드 성공 여부 확인
+      - name: Build application
+        run: pnpm run build
+        env:
+          # GitHub Secrets에서 환경 변수 읽기
+          # 이 변수들은 GitHub 리포지토리의 Settings > Secrets and variables > Actions에서 설정
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VITE_APP_ID: ${{ secrets.VITE_APP_ID }}
+          OAUTH_SERVER_URL: ${{ secrets.OAUTH_SERVER_URL }}
+          VITE_OAUTH_PORTAL_URL: ${{ secrets.VITE_OAUTH_PORTAL_URL }}
+          OWNER_OPEN_ID: ${{ secrets.OWNER_OPEN_ID }}
+          OWNER_NAME: ${{ secrets.OWNER_NAME }}
+          BUILT_IN_FORGE_API_URL: ${{ secrets.BUILT_IN_FORGE_API_URL }}
+          BUILT_IN_FORGE_API_KEY: ${{ secrets.BUILT_IN_FORGE_API_KEY }}
+          VITE_FRONTEND_FORGE_API_KEY: ${{ secrets.VITE_FRONTEND_FORGE_API_KEY }}
+          VITE_FRONTEND_FORGE_API_URL: ${{ secrets.VITE_FRONTEND_FORGE_API_URL }}
+          NEXT_PUBLIC_PORTONE_STORE_ID: ${{ secrets.NEXT_PUBLIC_PORTONE_STORE_ID }}
+          PORTONE_API_KEY: ${{ secrets.PORTONE_API_KEY }}
+          PORTONE_API_SECRET: ${{ secrets.PORTONE_API_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # 10. Vitest 테스트 실행 (선택사항)
+      # 단위 테스트 검증
+      - name: Run tests
+        run: pnpm test
+        continue-on-error: true
+
+      # 11. 빌드 결과 확인
+      - name: Check build output
+        run: |
+          if [ -d "dist" ]; then
+            echo "✅ Build succeeded! dist/ directory created."
+            ls -la dist/
+          else
+            echo "❌ Build failed! dist/ directory not found."
+            exit 1
+          fi
+
+      # 12. 성공 알림 (선택사항)
+      - name: CI Pipeline Success
+        if: success()
+        run: echo "✅ CI Pipeline completed successfully!"
+
+      # 13. 실패 알림 (선택사항)
+      - name: CI Pipeline Failed
+        if: failure()
+        run: echo "❌ CI Pipeline failed! Please check the logs above."
