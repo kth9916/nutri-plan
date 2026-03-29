@@ -5,12 +5,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
-    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist-server",
+    "build": "vite build client && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist-server",
     "start": "NODE_ENV=production node dist-server/index.js",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
