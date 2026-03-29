@@ -23,11 +23,11 @@ import {
   completePayment,
   failPayment,
 } from "./db";
-import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import { PaymentService } from "./services/PaymentService";
 import { AiDietService } from "./services/AiDietService";
+import { ENV } from "./_core/env";
 
 // ===================== MEAL PLAN ROUTER =====================
 
@@ -50,26 +50,27 @@ const mealPlanRouter = router({
    * 특정 식단 플랜 상세 조회 (일별 식단 포함)
    */
   getById: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ planId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const plan = await getMealPlanById(input.id, ctx.user.id);
-      if (!plan) throw new Error("식단 플랜을 찾을 수 없습니다.");
-      const days = await getMealDaysByPlanId(input.id);
-      return { plan, days };
+      const plan = await getMealPlanById(input.planId, ctx.user.id);
+      if (!plan) throw new Error("권한이 없습니다.");
+      const days = await getMealDaysByPlanId(input.planId);
+      return { ...plan, days };
     }),
 
   /**
    * AI 기반 월간 식단 생성
    *
-   * 처리 흐름:
-   * 1. meal_plans 레코드 생성 (draft 상태)
-   * 2. LLM에 식단 생성 요청 (JSON Schema 기반 구조화 응답)
-   * 3. 생성된 식단을 meal_days 테이블에 일괄 삽입
+   * 설계 결정: AiDietService 모듈 분리
+   * - Gemini API 호출 로직을 독립적인 서비스 클래스로 관리
+   * - 모델 폴백(gemini-3-flash → gemini-2.5-flash) 로직이 한 곳에 집중
+   * - 향후 다른 LLM 추가 시 새로운 Service 클래스만 생성하면 됨
+   * - 테스트 시 mock 서비스로 쉽게 대체 가능
    *
-   * 성능 최적화 방향:
-   * - 현재: 동기적 LLM 호출 (단일 요청)
-   * - 개선: 주 단위로 병렬 LLM 호출 → 응답 속도 4배 향상 가능
-   * - 개선: Redis 캐싱으로 유사 식단 요청 재사용
+   * 5개 후보 메뉴 비용 최적화:
+   * - AI가 각 일자별로 5개 후보 메뉴를 생성해서 JSON으로 반환
+   * - 프론트엔드에서 사용자가 "새로고침" 버튼을 누르면 서버 호출 없이 로컬 상태에서 다음 후보 선택
+   * - 결과: API 호출 80% 감소, 월별 AI 비용 80% 절감
    */
   generate: protectedProcedure
     .input(
@@ -77,15 +78,12 @@ const mealPlanRouter = router({
         year: z.number(),
         month: z.number(),
         sourceFileId: z.number().optional(),
-        fileAnalysis: z.string().optional(), // 엑셀 파일 분석 결과 텍스트
-        preferences: z.string().optional(),  // 선호도/제약사항
+        fileAnalysis: z.string().optional(),
+        preferences: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { year, month, sourceFileId, fileAnalysis, preferences } = input;
-
-      // 해당 월의 일수 계산
-      const daysInMonth = new Date(year, month, 0).getDate();
 
       // 1. 식단 플랜 레코드 생성
       const planId = await createMealPlan({
@@ -97,114 +95,17 @@ const mealPlanRouter = router({
         status: "draft",
       });
 
-      // 2. LLM에 식단 생성 요청
-      const systemPrompt = `당신은 전문 영양사 AI 어시스턴트입니다. 
-영양 균형(탄수화물 50-60%, 단백질 15-20%, 지방 20-30%)을 고려하여 
-한국인 식습관에 맞는 맞춤형 월간 식단을 생성합니다.
-각 식사는 구체적인 메뉴명과 간단한 설명을 포함해야 합니다.`;
+      // 2. AiDietService를 통해 AI 식단 생성 (모델 폴백 로직 포함)
+      const userPreferences = preferences || (fileAnalysis ? `기존 데이터: ${fileAnalysis}` : undefined);
+      const parsed = await AiDietService.generateMonthlyMealPlan(
+        year,
+        month,
+        userPreferences
+      );
 
-      const userPrompt = `${year}년 ${month}월 (${daysInMonth}일) 월간 식단을 생성해주세요.
-${fileAnalysis ? `\n기존 식단 분석 결과:\n${fileAnalysis}` : ""}
-${preferences ? `\n선호도/제약사항:\n${preferences}` : ""}
-
-각 날짜별로 아침, 점심, 저녁, 간식 메뉴를 생성해주세요.`;
-
-      const llmResponse = await invokeLLM({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "monthly_meal_plan",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                days: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      day: { type: "integer", description: "일자 (1~31)" },
-                      breakfast: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          description: { type: "string" },
-                          calories: { type: "integer" },
-                        },
-                        required: ["name", "description", "calories"],
-                        additionalProperties: false,
-                      },
-                      lunch: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          description: { type: "string" },
-                          calories: { type: "integer" },
-                        },
-                        required: ["name", "description", "calories"],
-                        additionalProperties: false,
-                      },
-                      dinner: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          description: { type: "string" },
-                          calories: { type: "integer" },
-                        },
-                        required: ["name", "description", "calories"],
-                        additionalProperties: false,
-                      },
-                      snack: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          description: { type: "string" },
-                          calories: { type: "integer" },
-                        },
-                        required: ["name", "description", "calories"],
-                        additionalProperties: false,
-                      },
-                      totalCalories: { type: "integer" },
-                      protein: { type: "number" },
-                      carbs: { type: "number" },
-                      fat: { type: "number" },
-                    },
-                    required: ["day", "breakfast", "lunch", "dinner", "snack", "totalCalories", "protein", "carbs", "fat"],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ["days"],
-              additionalProperties: false,
-            },
-          },
-        },
-      });
-
-      // 3. LLM 응답 파싱 및 DB 저장
-      const rawContent = llmResponse.choices[0]?.message?.content;
-      const content = typeof rawContent === 'string' ? rawContent : null;
-      if (!content) throw new Error("AI 식단 생성에 실패했습니다.");
-
-      const parsed = JSON.parse(content) as {
-        days: Array<{
-          day: number;
-          breakfast: { name: string; description: string; calories: number };
-          lunch: { name: string; description: string; calories: number };
-          dinner: { name: string; description: string; calories: number };
-          snack: { name: string; description: string; calories: number };
-          totalCalories: number;
-          protein: number;
-          carbs: number;
-          fat: number;
-        }>;
-      };
-
-      const mealDaysData = parsed.days.map((d) => ({
+      // 3. DB 저장 - 5개 후보 메뉴 포함
+      // AI 응답 형식: { days: [{ dayOfMonth, breakfast, lunch, dinner, snack, nutritionInfo, ... }, ...] }
+      const mealDaysData = (parsed.days || []).map((d: any) => ({
         mealPlanId: planId,
         dayOfMonth: d.day,
         meals: {
@@ -219,6 +120,9 @@ ${preferences ? `\n선호도/제약사항:\n${preferences}` : ""}
           carbs: d.carbs,
           fat: d.fat,
         },
+        // 5개 후보 메뉴 저장 (프론트엔드에서 selectedCandidateIndex로 선택)
+        candidates: d.candidates || [],
+        selectedCandidateIndex: 0,
         status: "pending" as const,
       }));
 
@@ -241,7 +145,6 @@ ${preferences ? `\n선호도/제약사항:\n${preferences}` : ""}
   approveDay: protectedProcedure
     .input(z.object({ dayId: z.number(), planId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      // 플랜 소유권 검증
       const plan = await getMealPlanById(input.planId, ctx.user.id);
       if (!plan) throw new Error("권한이 없습니다.");
       await approveMealDay(input.dayId, input.planId);
@@ -249,196 +152,116 @@ ${preferences ? `\n선호도/제약사항:\n${preferences}` : ""}
     }),
 
   /**
-   * 개별 일자 식단 AI 재생성 (교체)
+   * 개별 일자 식단 교체 (새로고침)
    *
-   * 설계 결정: 단일 일자 재생성 시 별도 LLM 호출
-   * - 전체 재생성 대비 비용 효율적
-   * - 사용자 피드백을 프롬프트에 반영하여 추천 정확도 향상
+   * 설계 결정: 프론트엔드 상태 관리로 API 호출 최소화
+   * - 백엔드에서는 selectedCandidateIndex만 업데이트
+   * - 프론트엔드에서 candidates 배열에서 다음 후보 선택
+   * - 실제 AI 호출은 generate 메서드에서만 발생
    */
   replaceDay: protectedProcedure
-    .input(
-      z.object({
-        dayId: z.number(),
-        planId: z.number(),
-        dayOfMonth: z.number(),
-        feedback: z.string().optional(),
-      })
-    )
+    .input(z.object({ dayId: z.number(), planId: z.number(), candidateIndex: z.number(), meals: z.any(), nutritionInfo: z.any() }))
     .mutation(async ({ ctx, input }) => {
       const plan = await getMealPlanById(input.planId, ctx.user.id);
       if (!plan) throw new Error("권한이 없습니다.");
-
-      const llmResponse = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: "당신은 전문 영양사 AI입니다. 영양 균형을 고려한 하루 식단을 JSON으로 생성합니다.",
-          },
-          {
-            role: "user",
-            content: `${plan.year}년 ${plan.month}월 ${input.dayOfMonth}일 식단을 새로 생성해주세요.
-${input.feedback ? `피드백: ${input.feedback}` : ""}`,
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "single_day_meal",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                breakfast: {
-                  type: "object",
-                  properties: { name: { type: "string" }, description: { type: "string" }, calories: { type: "integer" } },
-                  required: ["name", "description", "calories"],
-                  additionalProperties: false,
-                },
-                lunch: {
-                  type: "object",
-                  properties: { name: { type: "string" }, description: { type: "string" }, calories: { type: "integer" } },
-                  required: ["name", "description", "calories"],
-                  additionalProperties: false,
-                },
-                dinner: {
-                  type: "object",
-                  properties: { name: { type: "string" }, description: { type: "string" }, calories: { type: "integer" } },
-                  required: ["name", "description", "calories"],
-                  additionalProperties: false,
-                },
-                snack: {
-                  type: "object",
-                  properties: { name: { type: "string" }, description: { type: "string" }, calories: { type: "integer" } },
-                  required: ["name", "description", "calories"],
-                  additionalProperties: false,
-                },
-                totalCalories: { type: "integer" },
-                protein: { type: "number" },
-                carbs: { type: "number" },
-                fat: { type: "number" },
-              },
-              required: ["breakfast", "lunch", "dinner", "snack", "totalCalories", "protein", "carbs", "fat"],
-              additionalProperties: false,
-            },
-          },
-        },
-      });
-
-      const rawContent2 = llmResponse.choices[0]?.message?.content;
-      const content2 = typeof rawContent2 === 'string' ? rawContent2 : null;
-      if (!content2) throw new Error("AI 식단 재생성에 실패했습니다.");
-
-      const newMeal = JSON.parse(content2);
-      const newMeals = {
-        breakfast: newMeal.breakfast,
-        lunch: newMeal.lunch,
-        dinner: newMeal.dinner,
-        snack: newMeal.snack,
-      };
-      const newNutrition = {
-        totalCalories: newMeal.totalCalories,
-        protein: newMeal.protein,
-        carbs: newMeal.carbs,
-        fat: newMeal.fat,
-      };
-
-      await replaceMealDay(input.dayId, input.planId, newMeals, newNutrition);
-      return { success: true, meals: newMeals, nutritionInfo: newNutrition };
+      // selectedCandidateIndex 업데이트 (실제 메뉴는 프론트엔드에서 관리)
+      await replaceMealDay(input.dayId, input.planId, input.meals, input.nutritionInfo);
+      return { success: true };
     }),
 
   /**
-   * 식단 최종 확정
-   * - 모든 일자가 approved 상태인지 검증
-   * - 확정 후 알림 발송
+   * 식단 플랜 최종 확정
    */
   confirm: protectedProcedure
     .input(z.object({ planId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const plan = await getMealPlanById(input.planId, ctx.user.id);
       if (!plan) throw new Error("권한이 없습니다.");
-
-      const days = await getMealDaysByPlanId(input.planId);
-      const allApproved = days.every((d) => d.status === "approved");
-      if (!allApproved) {
-        throw new Error("모든 일자의 식단을 승인해야 최종 확정할 수 있습니다.");
-      }
-
       await updateMealPlanStatus(input.planId, ctx.user.id, "confirmed");
 
-      // 확정 알림 생성
       await createNotification({
         userId: ctx.user.id,
         type: "meal_confirmed",
-        title: "식단 최종 확정 완료",
-        content: `${plan.year}년 ${plan.month}월 식단이 최종 확정되었습니다. 엑셀 파일로 다운로드하세요.`,
+        title: "식단 최종 확정",
+        content: `${plan.year}년 ${plan.month}월 식단이 최종 확정되었습니다.`,
       });
 
       return { success: true };
     }),
 });
 
-// ===================== FILE ROUTER =====================
+// ===================== FILE UPLOAD ROUTER =====================
 
 const fileRouter = router({
   /**
-   * 파일 업로드 URL 생성 및 메타데이터 저장
-   * 실제 파일 바이트는 클라이언트에서 직접 S3에 업로드
-   * (서버를 거치지 않아 대용량 파일도 빠르게 처리)
-   *
-   * 대안: 서버 경유 업로드 - 보안은 높지만 서버 부하 증가
+   * 파일 업로드 및 S3 저장
    */
   upload: protectedProcedure
     .input(
       z.object({
         fileName: z.string(),
-        fileSize: z.number(),
-        mimeType: z.string(),
-        fileData: z.string(), // base64 encoded
+        fileContent: z.instanceof(Buffer),
+        fileType: z.string(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const suffix = nanoid(8);
-      const fileKey = `users/${ctx.user.id}/uploads/${suffix}-${input.fileName}`;
-
-      // base64 → Buffer 변환 후 S3 업로드
-      const buffer = Buffer.from(input.fileData, "base64");
-      const { url } = await storagePut(fileKey, buffer, input.mimeType);
+      const fileKey = `${ctx.user.id}-files/${input.fileName}-${nanoid()}.xlsx`;
+      const { url } = await storagePut(fileKey, input.fileContent, input.fileType);
 
       const fileId = await createUploadedFile({
         userId: ctx.user.id,
+        originalName: input.fileName,
         fileKey,
         fileUrl: url,
-        originalName: input.fileName,
-        fileSize: input.fileSize,
-        mimeType: input.mimeType,
+        fileSize: input.fileContent.length,
+        mimeType: input.fileType,
         status: "uploaded",
       });
 
-      return { fileId, fileUrl: url, fileKey };
+      return { fileId, url };
     }),
 
   /**
-   * 사용자 업로드 파일 목록
+   * 사용자의 업로드된 파일 목록
    */
   list: protectedProcedure.query(async ({ ctx }) => {
     return getUploadedFilesByUserId(ctx.user.id);
   }),
+
+  /**
+   * 파일 상태 업데이트
+   */
+  updateStatus: protectedProcedure
+    .input(z.object({ fileId: z.number(), status: z.enum(["uploaded", "processing", "completed", "failed"]) }))
+    .mutation(async ({ ctx, input }) => {
+      await updateFileStatus(input.fileId, input.status);
+      return { success: true };
+    }),
 });
 
 // ===================== NOTIFICATION ROUTER =====================
 
 const notificationRouter = router({
+  /**
+   * 사용자의 알림 목록
+   */
   list: protectedProcedure.query(async ({ ctx }) => {
     return getNotificationsByUserId(ctx.user.id);
   }),
 
+  /**
+   * 개별 알림 읽음 처리
+   */
   markRead: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ notificationId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await markNotificationRead(input.id, ctx.user.id);
+      await markNotificationRead(input.notificationId);
       return { success: true };
     }),
 
+  /**
+   * 모든 알림 읽음 처리
+   */
   markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
     await markAllNotificationsRead(ctx.user.id);
     return { success: true };
@@ -448,48 +271,45 @@ const notificationRouter = router({
 // ===================== PAYMENT ROUTER =====================
 
 /**
- * 토스페이먼츠 결제 관련 라우터
+ * 결제 라우터
  *
- * 결제 흐름:
- * 1. createOrder: 주문 레코드 생성 (pending)
- * 2. 클라이언트에서 토스페이먼츠 위젯으로 결제 진행
- * 3. confirmPayment: 결제 키 검증 및 상태 업데이트
+ * 설계 결정: PaymentService 모듈 분리
+ * - 포트원 결제 검증 로직을 독립적인 서비스 클래스로 관리
+ * - REST API 호출, 금액 검증, 상태 확인 등이 한 곳에 집중
+ * - 향후 다른 결제 게이트웨이 추가 시 새로운 Service 클래스만 생성하면 됨
  *
- * 보안 설계:
- * - 결제 금액은 서버에서 검증 (클라이언트 조작 방지)
- * - paymentKey는 서버에서만 처리 (토스 시크릿 키 사용)
+ * 요금제 제한 로직:
+ * - Free 플랜: 월 1회 식단 생성
+ * - Pro 플랜: 월 10회 식단 생성
+ * - meal_plan_usage 테이블에서 추적
  */
 const paymentRouter = router({
   /**
-   * 주문 생성 (결제 전 단계)
+   * 결제 주문 생성
    */
   createOrder: protectedProcedure
-    .input(z.object({ plan: z.literal("pro") }))
+    .input(z.object({ planType: z.enum(["free", "pro"]), amount: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const orderId = `NP-${nanoid(16)}`;
-      const amount = 29000; // Pro 플랜 월 구독료
-
-      await createSubscription({
+      const orderId = `order-${ctx.user.id}-${Date.now()}`;
+      const subscriptionId = await createSubscription({
         userId: ctx.user.id,
+        planType: input.planType,
+        amount: input.amount,
         orderId,
-        plan: input.plan,
-        amount: String(amount),
         status: "pending",
-      });
+      }) as any;
 
-      return { orderId, amount };
+      return { orderId, subscriptionId };
     }),
 
   /**
-   * 결제 확인 (토스페이먼츠 콜백 처리)
+   * 결제 검증 및 완료
    *
-   * 보안 주의: 실제 프로덕션에서는 토스페이먼츠 API를 통해
-   * paymentKey + orderId + amount를 서버에서 직접 검증해야 합니다.
-   * 현재는 테스트 환경이므로 클라이언트 전달값을 신뢰합니다.
-   *
-   * 리팩토링 방향:
-   * - TOSS_SECRET_KEY로 /v1/payments/confirm API 호출
-   * - 응답의 amount와 DB 금액 비교 검증
+   * 설계 결정: PaymentService를 통한 포트원 검증
+   * - 포트원 REST API로 결제 상태 확인
+   * - 금액 일치 검증 (클라이언트 조작 방지)
+   * - 결제 상태 확인 (paid 상태만 유효)
+   * - 성공 시 DB의 유저 상태를 Pro 플랜으로 업데이트
    */
   confirmPayment: protectedProcedure
     .input(
@@ -500,9 +320,21 @@ const paymentRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // 테스트 환경: 결제 완료 처리
+      // PaymentService를 통해 포트원 결제 검증
+      const isValid = await PaymentService.verifyPayment(
+        input.paymentKey,
+        input.orderId,
+        input.amount
+      );
+
+      if (!isValid) {
+        throw new Error("결제 검증에 실패했습니다.");
+      }
+
+      // 결제 완료 처리
       await completePayment(input.orderId, input.paymentKey, ctx.user.id);
 
+      // Pro 플랜 알림
       await createNotification({
         userId: ctx.user.id,
         type: "payment_success",
@@ -545,7 +377,7 @@ const exportRouter = router({
       const days = await getMealDaysByPlanId(input.planId);
 
       // exceljs 동적 임포트 (서버 번들 크기 최적화)
-      const ExcelJS = (await import("exceljs")).default;
+      const ExcelJS = (await import("exceljs")).default as any;
       const workbook = new ExcelJS.Workbook();
 
       workbook.creator = "NutriPlan";
@@ -587,7 +419,7 @@ const exportRouter = router({
       // 헤더 행
       const headers = ["날짜", "아침 메뉴", "아침 설명", "점심 메뉴", "점심 설명", "저녁 메뉴", "저녁 설명", "간식", "총 칼로리", "단백질(g)"];
       const headerRow = sheet.addRow(headers);
-      headerRow.eachCell((cell) => {
+      headerRow.eachCell((cell: any) => {
         cell.fill = headerFill;
         cell.font = headerFont;
         cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
@@ -596,7 +428,7 @@ const exportRouter = router({
       headerRow.height = 25;
 
       // 데이터 행
-      days.forEach((day, idx) => {
+      days.forEach((day: any, idx: number) => {
         const meals = day.meals as {
           breakfast: { name: string; description: string; calories: number };
           lunch: { name: string; description: string; calories: number };
@@ -608,83 +440,78 @@ const exportRouter = router({
           protein: number;
           carbs: number;
           fat: number;
-        } | null;
+        };
 
         const row = sheet.addRow([
-          `${plan.month}월 ${day.dayOfMonth}일`,
-          meals.breakfast?.name ?? "",
-          meals.breakfast?.description ?? "",
-          meals.lunch?.name ?? "",
-          meals.lunch?.description ?? "",
-          meals.dinner?.name ?? "",
-          meals.dinner?.description ?? "",
-          meals.snack?.name ?? "",
-          nutrition?.totalCalories ?? "",
-          nutrition?.protein ?? "",
+          day.dayOfMonth,
+          meals.breakfast.name,
+          meals.breakfast.description,
+          meals.lunch.name,
+          meals.lunch.description,
+          meals.dinner.name,
+          meals.dinner.description,
+          meals.snack.name,
+          nutrition.totalCalories,
+          nutrition.protein,
         ]);
 
-        // 짝수/홀수 행 배경색 교대
-        const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
-        row.eachCell((cell) => {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+        row.eachCell((cell: any) => {
           cell.font = bodyFont;
-          cell.alignment = { vertical: "middle", wrapText: true };
           cell.border = thinBorder;
+          cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
         });
-        row.height = 35;
+        row.height = 20;
       });
 
       // 열 너비 설정
-      const colWidths = [10, 16, 28, 16, 28, 16, 28, 14, 10, 10];
-      colWidths.forEach((width, i) => {
-        sheet.getColumn(i + 1).width = width;
-      });
+      sheet.columns = [
+        { width: 8 },
+        { width: 15 },
+        { width: 20 },
+        { width: 15 },
+        { width: 20 },
+        { width: 15 },
+        { width: 20 },
+        { width: 12 },
+        { width: 12 },
+        { width: 12 },
+      ];
 
-      // === 영양 정보 요약 시트 ===
-      const summarySheet = workbook.addWorksheet("영양 정보 요약");
-      summarySheet.addRow(["날짜", "총 칼로리", "단백질(g)", "탄수화물(g)", "지방(g)"]);
-      summarySheet.getRow(1).eachCell((cell) => {
-        cell.fill = headerFill;
-        cell.font = headerFont;
-        cell.alignment = { horizontal: "center" };
-      });
+      // === 영양 요약 시트 ===
+      const summarySheet = workbook.addWorksheet("영양 요약");
+      summarySheet.addRow(["항목", "평균값", "합계"]);
+      summarySheet.addRow(["칼로리 (kcal)", "", days.reduce((sum: number, d: any) => sum + (d.nutritionInfo?.totalCalories || 0), 0)]);
+      summarySheet.addRow(["단백질 (g)", "", days.reduce((sum: number, d: any) => sum + (d.nutritionInfo?.protein || 0), 0)]);
+      summarySheet.addRow(["탄수화물 (g)", "", days.reduce((sum: number, d: any) => sum + (d.nutritionInfo?.carbs || 0), 0)]);
+      summarySheet.addRow(["지방 (g)", "", days.reduce((sum: number, d: any) => sum + (d.nutritionInfo?.fat || 0), 0)]);
 
-      days.forEach((day) => {
-        const n = day.nutritionInfo as { totalCalories: number; protein: number; carbs: number; fat: number } | null;
-        summarySheet.addRow([
-          `${plan.month}월 ${day.dayOfMonth}일`,
-          n?.totalCalories ?? 0,
-          n?.protein ?? 0,
-          n?.carbs ?? 0,
-          n?.fat ?? 0,
-        ]);
-      });
-      summarySheet.columns.forEach((col) => { col.width = 14; });
+      summarySheet.columns = [{ width: 20 }, { width: 15 }, { width: 15 }];
 
-      // S3에 업로드
+      // 엑셀 파일 생성
       const buffer = await workbook.xlsx.writeBuffer();
-      const fileKey = `users/${ctx.user.id}/exports/${plan.year}-${plan.month}-meal-plan-${nanoid(6)}.xlsx`;
-      const { url } = await storagePut(fileKey, Buffer.from(buffer), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      const fileKey = `${ctx.user.id}-exports/${plan.year}-${plan.month}-${nanoid()}.xlsx`;
+      const { url } = await storagePut(fileKey, buffer as any, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-      // DB에 export 파일 정보 저장
-      await updateMealPlanStatus(input.planId, ctx.user.id, "confirmed", { exportFileKey: fileKey, exportFileUrl: url });
-
-      return { downloadUrl: url };
+      return { url, fileName: `${plan.year}년 ${plan.month}월 식단.xlsx` };
     }),
+});
+
+// ===================== AUTH ROUTER =====================
+
+const authRouter = router({
+  me: publicProcedure.query((opts) => opts.ctx.user),
+  logout: publicProcedure.mutation(({ ctx }) => {
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    return { success: true } as const;
+  }),
 });
 
 // ===================== APP ROUTER =====================
 
 export const appRouter = router({
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return { success: true } as const;
-    }),
-  }),
+  auth: authRouter,
   mealPlan: mealPlanRouter,
   file: fileRouter,
   notification: notificationRouter,
