@@ -3,24 +3,7 @@
   "buildCommand": "pnpm run build",
   "devCommand": "pnpm run dev",
   "installCommand": "pnpm install --frozen-lockfile",
-  "framework": null,
-  "env": {
-    "DATABASE_URL": "@DATABASE_URL",
-    "JWT_SECRET": "@JWT_SECRET",
-    "VITE_APP_ID": "@VITE_APP_ID",
-    "OAUTH_SERVER_URL": "@OAUTH_SERVER_URL",
-    "VITE_OAUTH_PORTAL_URL": "@VITE_OAUTH_PORTAL_URL",
-    "OWNER_OPEN_ID": "@OWNER_OPEN_ID",
-    "OWNER_NAME": "@OWNER_NAME",
-    "BUILT_IN_FORGE_API_URL": "@BUILT_IN_FORGE_API_URL",
-    "BUILT_IN_FORGE_API_KEY": "@BUILT_IN_FORGE_API_KEY",
-    "VITE_FRONTEND_FORGE_API_KEY": "@VITE_FRONTEND_FORGE_API_KEY",
-    "VITE_FRONTEND_FORGE_API_URL": "@VITE_FRONTEND_FORGE_API_URL",
-    "NEXT_PUBLIC_PORTONE_STORE_ID": "@NEXT_PUBLIC_PORTONE_STORE_ID",
-    "PORTONE_API_KEY": "@PORTONE_API_KEY",
-    "PORTONE_API_SECRET": "@PORTONE_API_SECRET",
-    "GEMINI_API_KEY": "@GEMINI_API_KEY"
-  },
+  "framework": "vite",
   "headers": [
     {
       "source": "/(.*)",
@@ -42,35 +25,8 @@
           "value": "strict-origin-when-cross-origin"
         },
         {
-          "key": "Permissions-Policy",
-          "value": "geolocation=(), microphone=(), camera=()"
-        }
-      ]
-    },
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/static/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/_next/static/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.iamport.kr; connect-src 'self' https://*.supabase.co https://api.iamport.kr https://generativelanguage.googleapis.com; img-src 'self' data: https://*.supabase.co; style-src 'self' 'unsafe-inline';"
         }
       ]
     }
