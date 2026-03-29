@@ -6,24 +6,20 @@ import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
-// =============================================================================
-// 경로 설정 및 상수
-// =============================================================================
 const PROJECT_ROOT = import.meta.dirname;
 const CLIENT_ROOT = path.resolve(PROJECT_ROOT, "client");
-const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
-const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
-const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
 
 // =============================================================================
-// Manus Debug Collector - Helper Functions
+// Manus Debug Collector (기존 기능 유지)
 // =============================================================================
+const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
+const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
+const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
+
 type LogSource = "browserConsole" | "networkRequests" | "sessionReplay";
 
 function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
+  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
 function trimLogFile(logPath: string, maxSize: number) {
@@ -55,9 +51,6 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
   trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
 }
 
-// =============================================================================
-// Vite Plugins
-// =============================================================================
 function vitePluginManusDebugCollector(): Plugin {
   return {
     name: "manus-debug-collector",
@@ -105,16 +98,11 @@ function vitePluginManusDebugCollector(): Plugin {
 }
 
 // =============================================================================
-// Main Config
+// Vite Main Configuration
 // =============================================================================
 export default defineConfig({
-  // 1. Root 설정: Vite의 작업 기준 디렉토리를 client로 명시
   root: CLIENT_ROOT,
-
-  // 2. Public 디렉토리: root가 client이므로 그 안의 public을 명시
   publicDir: path.resolve(CLIENT_ROOT, "public"),
-
-  // 3. Env 위치: .env 파일은 프로젝트 루트에 있으므로 한 단계 위를 가리킴
   envDir: PROJECT_ROOT,
 
   plugins: [
@@ -127,28 +115,28 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      // 4. 별칭 설정: @가 client/src를 정확히 가리키도록 절대 경로 지정
       "@": path.resolve(CLIENT_ROOT, "src"),
       "@shared": path.resolve(PROJECT_ROOT, "shared"),
       "@assets": path.resolve(PROJECT_ROOT, "attached_assets"),
     },
+    // 빌드 시 확장자를 생략해도 정확히 찾을 수 있도록 명시
+    extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"],
   },
 
   build: {
-    // 5. 빌드 결과물: 프로젝트 루트의 dist/public에 생성
     outDir: path.resolve(PROJECT_ROOT, "dist", "public"),
     emptyOutDir: true,
     minify: "terser",
-    sourcemap: process.env.NODE_ENV !== "production",
+    // Vercel 빌드 시 메모리 부족 방지를 위해 프로덕션 소스맵 비활성화
+    sourcemap: false,
     terserOptions: {
       compress: {
-        drop_console: process.env.NODE_ENV === "production",
+        drop_console: true,
         drop_debugger: true,
       },
     },
     rollupOptions: {
       output: {
-        // 6. 청크 최적화 (기존 설정 유지)
         manualChunks: {
           react: ["react", "react-dom", "react-hook-form"],
           ui: [
@@ -160,21 +148,6 @@ export default defineConfig({
           utils: ["zod", "date-fns", "clsx"],
         },
       },
-    },
-  },
-
-  server: {
-    host: true,
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      "localhost",
-      "127.0.0.1",
-    ],
-    fs: {
-      strict: true,
-      // 프로젝트 루트나 shared 폴더에 접근 가능하도록 허용 범위 설정 필요 시 추가
-      allow: [PROJECT_ROOT],
     },
   },
 });
