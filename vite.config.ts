@@ -7,10 +7,9 @@ import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const PROJECT_ROOT = import.meta.dirname;
-const CLIENT_ROOT = path.resolve(PROJECT_ROOT, "client");
 
 // =============================================================================
-// Manus Debug Collector (기존 기능 유지)
+// Manus Debug Collector (기능 유지)
 // =============================================================================
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
@@ -101,9 +100,11 @@ function vitePluginManusDebugCollector(): Plugin {
 // Vite Main Configuration
 // =============================================================================
 export default defineConfig({
-  root: CLIENT_ROOT,
-  publicDir: path.resolve(CLIENT_ROOT, "public"),
-  envDir: PROJECT_ROOT,
+  // root를 프로젝트 루트(최상단)로 변경하여 모든 alias 해석의 기준을 통일합니다.
+  root: PROJECT_ROOT,
+
+  // public 폴더 위치 명시
+  publicDir: path.resolve(PROJECT_ROOT, "client/public"),
 
   plugins: [
     react(),
@@ -115,27 +116,22 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@": path.resolve(CLIENT_ROOT, "src"),
+      "@": path.resolve(PROJECT_ROOT, "client/src"),
       "@shared": path.resolve(PROJECT_ROOT, "shared"),
       "@assets": path.resolve(PROJECT_ROOT, "attached_assets"),
     },
-    // 빌드 시 확장자를 생략해도 정확히 찾을 수 있도록 명시
     extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"],
   },
 
   build: {
-    outDir: path.resolve(PROJECT_ROOT, "dist", "public"),
+    // 빌드 결과물 경로
+    outDir: path.resolve(PROJECT_ROOT, "dist/public"),
     emptyOutDir: true,
     minify: "terser",
-    // Vercel 빌드 시 메모리 부족 방지를 위해 프로덕션 소스맵 비활성화
     sourcemap: false,
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
     rollupOptions: {
+      // index.html이 client 폴더 안에 있음을 명시적으로 지정
+      input: path.resolve(PROJECT_ROOT, "client/index.html"),
       output: {
         manualChunks: {
           react: ["react", "react-dom", "react-hook-form"],
@@ -148,6 +144,14 @@ export default defineConfig({
           utils: ["zod", "date-fns", "clsx"],
         },
       },
+    },
+  },
+
+  server: {
+    host: true,
+    fs: {
+      strict: true,
+      allow: [PROJECT_ROOT],
     },
   },
 });
