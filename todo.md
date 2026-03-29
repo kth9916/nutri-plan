@@ -122,3 +122,36 @@
 - [x] 디버깅 코드 제거 로직 (terser drop_console)
 - [x] README.md 포괄적 문서화
 - [x] 최종 검증 및 체크포인트 저장
+
+
+## Phase 13: Supabase 마이그레이션 및 타입 안정성 강화
+
+### 1단계: Supabase 인증 + PostgreSQL 마이그레이션
+- [ ] Supabase 클라이언트 설정 (@supabase/supabase-js)
+- [ ] PostgreSQL 스키마 재정의 (users, meal_plans, meal_days 등)
+- [ ] Supabase Auth 통합 (이메일 + 구글 소셜 로그인)
+- [ ] RLS(Row Level Security) 정책 설정
+- [ ] Manus OAuth 및 MySQL 완전 제거
+- [ ] 기존 데이터 마이그레이션 스크립트 (필요시)
+
+### 2단계: 타입 안정성 강화
+- [ ] routers.ts 타입 오류 해결 (응답 타입 정의)
+- [ ] MealPlanDetail.tsx 타입 오류 해결 (Props 타입 정의)
+- [ ] Subscription.tsx 포트원 결제 타입 정정
+- [ ] Upload.tsx 파일 업로드 타입 정정
+- [ ] 공통 타입 인터페이스 정의 (types/index.ts)
+- [ ] TypeScript 엄격 모드 검증 (pnpm check 0 오류)
+
+### 3단계: 환경 변수 최종 정리
+- [ ] Supabase 환경 변수 (URL, Anon Key, Service Role Key)
+- [ ] 포트원 환경 변수 (Store ID, API Key, Secret)
+- [ ] Gemini API 환경 변수
+- [ ] 최종 환경 변수 목록 문서화
+- [ ] Vercel 대시보드 복사용 환경 변수 정리
+
+### 4단계: 최종 검증 및 배포 준비
+- [ ] 빌드 테스트 (pnpm build)
+- [ ] 타입 검사 (pnpm check)
+- [ ] 테스트 실행 (pnpm test)
+- [ ] 최종 체크포인트 저장
+- [ ] GitHub 푸시 및 Vercel 자동 배포 확인
