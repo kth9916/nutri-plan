@@ -21,15 +21,19 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Upload, Calendar, FileSpreadsheet, Bell, CreditCard, Sparkles, Home } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "대시보드", path: "/dashboard" },
+  { icon: Upload, label: "식단 업로드", path: "/dashboard/upload" },
+  { icon: Calendar, label: "식단 플랜", path: "/dashboard/plans" },
+  { icon: FileSpreadsheet, label: "파일 관리", path: "/dashboard/files" },
+  { icon: Bell, label: "알림", path: "/dashboard/notifications" },
+  { icon: CreditCard, label: "구독 관리", path: "/dashboard/subscription" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -170,9 +174,10 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
-                  </span>
+                  <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-3 h-3 text-primary-foreground" />
+                  </div>
+                  <span className="font-bold tracking-tight truncate text-sm">NutriPlan</span>
                 </div>
               ) : null}
             </div>
@@ -226,7 +231,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>로그아웃</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -257,7 +262,7 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+        <main className="flex-1 p-6 lg:p-8">{children}</main>
       </SidebarInset>
     </>
   );
