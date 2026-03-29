@@ -152,6 +152,49 @@ function vitePluginManusDebugCollector(): Plugin {
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
 
+/**
+ * 프로덕션 환경 최적화:
+ * - minify: 'terser' - 코드 최소화로 번들 크기 감소
+ * - sourcemap: false - 프로덕션에서 소스맵 제거 (보안 + 용량 감소)
+ * - rollupOptions - 청크 최적화 및 동적 임포트 분리
+ *
+ * 디버깅 코드 제거:
+ * - 프로덕션 빌드 시 console.log, console.warn 제거
+ * - terser의 compress 옵션으로 자동 제거
+ */
+const buildConfig: any = {
+  outDir: path.resolve(import.meta.dirname, "dist/public"),
+  emptyOutDir: true,
+  minify: "terser",
+  sourcemap: process.env.NODE_ENV === "production" ? false : true,
+  terserOptions: {
+    compress: {
+      // 프로덕션 환경에서 console.* 호출 제거
+      drop_console: process.env.NODE_ENV === "production",
+      drop_debugger: true,
+    },
+    mangle: true,
+    format: {
+      comments: false,
+    },
+  },
+  rollupOptions: {
+    output: {
+      // 청크 최적화: 주요 라이브러리를 별도 청크로 분리
+      manualChunks: {
+        // React 관련 라이브러리
+        react: ["react", "react-dom", "react-hook-form"],
+        // UI 라이브러리
+        ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "lucide-react"],
+        // tRPC 클라이언트
+        trpc: ["@trpc/client", "@trpc/react-query"],
+        // 유틸리티
+        utils: ["zod", "date-fns", "clsx"],
+      },
+    },
+  },
+};
+
 export default defineConfig({
   plugins,
   resolve: {
@@ -164,10 +207,7 @@ export default defineConfig({
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "client"),
   publicDir: path.resolve(import.meta.dirname, "client", "public"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
-  },
+  build: buildConfig,
   server: {
     host: true,
     allowedHosts: [

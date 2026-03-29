@@ -15,6 +15,13 @@
       "when": 1774786697597,
       "tag": "0001_fat_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774788460164,
+      "tag": "0002_omniscient_lester",
+      "breakpoints": true
     }
   ]
 }

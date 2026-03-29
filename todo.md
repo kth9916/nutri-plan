@@ -63,3 +63,62 @@
 - [x] Vitest 테스트 작성 (9개 테스트 통과)
 - [x] TypeScript 타입 오류 0개
 - [x] 최종 체크포인트 저장
+
+
+## Phase 11: 포트원 결제 시스템 및 Gemini AI 고도화
+
+### 1단계: 환경 변수 설정
+- [ ] 포트원 API 키 설정 (NEXT_PUBLIC_PORTONE_STORE_ID, PORTONE_API_KEY, PORTONE_API_SECRET)
+- [ ] Gemini API 키 설정 (GEMINI_API_KEY)
+- [ ] 환경 변수 검증 테스트
+
+### 2단계: 포트원 V1 결제 모듈 교체
+- [ ] 포트원 V1 SDK 패키지 설치 (@portone/browser-sdk)
+- [ ] 프론트엔드 결제 훅 구현 (usePortonePayment)
+- [ ] 백엔드 결제 검증 API 구현 (포트원 REST API 호출)
+- [ ] 결제 성공 시 DB 유저 상태 업데이트 (Pro 플랜)
+- [ ] 기존 토스페이먼츠 코드 제거
+
+### 3단계: Gemini API 연동 및 모델 폴백
+- [ ] @google/generative-ai 패키지 설치
+- [ ] AiDietService 모듈 생성 (Gemini API 호출)
+- [ ] 모델 폴백 로직 구현 (gemini-3-flash → gemini-2.5-flash)
+- [ ] 구조화된 JSON 출력 (Structured Output) 강제
+- [ ] 에러 핸들링 및 재시도 로직
+
+### 4단계: 5개 후보 메뉴 생성 및 상태 관리
+- [ ] AI 프롬프트 수정 (각 일자별 5개 후보 메뉴 생성)
+- [ ] 백엔드 meal_days 스키마 확장 (candidates 배열 저장)
+- [ ] 프론트엔드 상태 관리 (selectedCandidateIndex)
+- [ ] 새로고침 버튼 로직 변경 (AI 호출 → 로컬 상태 변경)
+
+### 5단계: 요금제 제한 로직
+- [ ] Free 플랜 월 1회 생성 제한
+- [ ] Pro 플랜 월 10회 생성 제한
+- [ ] 생성 횟수 추적 테이블 생성 (meal_plan_usage)
+- [ ] 백엔드 검증 로직 구현
+
+### 6단계: 서비스 모듈 분리
+- [ ] PaymentService 모듈 생성 (포트원 결제 로직)
+- [ ] AiDietService 모듈 생성 (Gemini API 호출)
+- [ ] 라우터에서 서비스 모듈 호출로 리팩토링
+- [ ] 상세 주석 작성 (설계 결정, 유지보수 가이드)
+
+### 7단계: 통합 테스트 및 검증
+- [ ] 포트원 결제 플로우 테스트
+- [ ] Gemini API 모델 폴백 테스트
+- [ ] 5개 후보 메뉴 상태 관리 테스트
+- [ ] 요금제 제한 로직 테스트
+- [ ] 최종 체크포인트 저장
+
+
+## Phase 12: CI/CD 파이프라인 및 배포 자동화
+
+- [x] GitHub Actions CI 파이프라인 작성 (.github/workflows/ci.yml)
+- [x] 캐싱 최적화 (pnpm, node_modules, .next)
+- [x] 환경 변수 GitHub Secrets 연동
+- [x] Vercel 배포 설정 (vercel.json)
+- [x] vite.config.ts 최적화 (보안 헤더, 캐싱 정책, console.log 제거)
+- [x] 디버깅 코드 제거 로직 (terser drop_console)
+- [x] README.md 포괄적 문서화
+- [x] 최종 검증 및 체크포인트 저장

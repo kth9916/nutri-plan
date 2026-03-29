@@ -6,6 +6,9 @@ export const ENV = {
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction: process.env.NODE_ENV === "production",
   tossSecretKey: process.env.TOSS_SECRET_KEY ?? "",
+  portoneApiKey: process.env.PORTONE_API_KEY ?? "",
+  portoneApiSecret: process.env.PORTONE_API_SECRET ?? "",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
 };

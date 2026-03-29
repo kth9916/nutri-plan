@@ -26,6 +26,8 @@ import {
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
+import { PaymentService } from "./services/PaymentService";
+import { AiDietService } from "./services/AiDietService";
 
 // ===================== MEAL PLAN ROUTER =====================
 

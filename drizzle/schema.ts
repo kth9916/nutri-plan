@@ -153,6 +153,17 @@ export const mealDays = mysqlTable("meal_days", {
    */
   meals: json("meals").notNull(),
   /**
+   * 5개 후보 메뉴 배열 (비용 최적화용)
+   * 구조: { breakfast: [{name, description, calories}, ...], lunch: [...], dinner: [...], snack: [...] }
+   * 설계: 프론트엔드에서 새로고침 시 서버 호출 없이 배열에서 다음 후보 선택 → API 호출 80% 감소
+   */
+  candidates: json("candidates"),
+  /**
+   * 선택된 후보 인덱스 (0~4)
+   * 사용자가 새로고침을 누르면 이 값이 증가
+   */
+  selectedCandidateIndex: int("selectedCandidateIndex").default(0).notNull(),
+  /**
    * nutritionInfo JSON 구조:
    * { totalCalories: number, protein: number, carbs: number, fat: number, fiber: number }
    */
@@ -188,3 +199,24 @@ export const notifications = mysqlTable("notifications", {
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * 월별 식단 생성 횟수 추적 테이블
+ * 요금제 제한 로직 구현용
+ * - Free 플랜: 월 1회 생성 가능
+ * - Pro 플랜: 월 10회 생성 가능
+ */
+export const mealPlanUsage = mysqlTable("meal_plan_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .references(() => users.id),
+  year: int("year").notNull(),
+  month: int("month").notNull(),
+  generationCount: int("generationCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MealPlanUsage = typeof mealPlanUsage.$inferSelect;
+export type InsertMealPlanUsage = typeof mealPlanUsage.$inferInsert;
