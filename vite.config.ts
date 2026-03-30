@@ -103,7 +103,10 @@ export default defineConfig({
   // 1. Root를 프로젝트 최상단으로 설정하여 shared 폴더 접근 허용
   root: path.resolve(PROJECT_ROOT, "client"),
 
-  // 2. public 디렉토리 위치 명시
+  // 2. 환경 변수 파일(.env)의 위치를 프로젝트 루트로 지정 (root 설정 변경 대응)
+  envDir: PROJECT_ROOT,
+
+  // 3. public 디렉토리 위치 명시
   publicDir: path.resolve(PROJECT_ROOT, "client/public"),
 
   plugins: [
@@ -124,13 +127,13 @@ export default defineConfig({
   },
 
   build: {
-    // 3. 빌드 결과물을 dist/public에 생성
+    // 4. 빌드 결과물을 dist/public에 생성
     outDir: path.resolve(PROJECT_ROOT, "dist/public"),
     emptyOutDir: true,
     minify: "terser",
     sourcemap: false,
     rollupOptions: {
-      // 4. index.html의 위치를 명시적으로 지정
+      // 5. index.html의 위치를 명시적으로 지정
       input: path.resolve(PROJECT_ROOT, "client/index.html"),
       output: {
         manualChunks: {

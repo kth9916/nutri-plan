@@ -1,25 +1,55 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Vite(클라이언트)와 Node.js(서버) 환경 모두를 지원하도록 수정합니다.
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+/**
+ * 환경 변수 추출 (클라이언트/서버 호환)
+ * Vite 클라이언트에서는 import.meta.env를, Node.js 서버에서는 process.env를 사용합니다.
+ */
+const getEnv = (key: string) => {
+  // 1. Vite 클라이언트 환경 (빌드 타임 치환)
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    return import.meta.env[key];
+  }
+  // 2. Node.js 서버 환경
+  if (typeof process !== "undefined" && process.env) {
+    return process.env[key];
+  }
+  return undefined;
+};
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  // 브라우저 콘솔에서 즉시 원인을 파악할 수 있도록 로깅을 추가합니다.
-  console.error("환경 변수 로드 실패: VITE_SUPABASE_URL 또는 VITE_SUPABASE_ANON_KEY가 정의되지 않았습니다.");
+const supabaseUrl = getEnv("VITE_SUPABASE_URL");
+const supabaseAnonKey = getEnv("VITE_SUPABASE_ANON_KEY");
+
+// 런타임 에러 방지를 위한 유효성 체크 및 폴백
+const isValidUrl = (url: string | undefined): url is string => {
+  try {
+    return !!url && (url.startsWith("http://") || url.startsWith("https://"));
+  } catch {
+    return false;
+  }
+};
+
+if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
+  console.error("❌ Supabase 설정 오류: VITE_SUPABASE_URL 또는 VITE_SUPABASE_ANON_KEY가 유효하지 않습니다.", {
+    url: supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+  });
 }
 
-export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "", {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
+// createClient에 유효하지 않은 URL이 들어가지 않도록 처리
+export const supabase = createClient(
+  isValidUrl(supabaseUrl) ? supabaseUrl : "https://placeholder-url.supabase.co",
+  supabaseAnonKey || "",
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
 export function getSupabaseAdmin() {
-  // 서버 환경에서는 process.env를 사용합니다.
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceRoleKey) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY 환경 변수가 설정되지 않았습니다.");
   }
