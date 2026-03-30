@@ -1,60 +1,65 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * 환경 변수 추출 (클라이언트/서버 호환)
- * Vite 클라이언트에서는 import.meta.env를, Node.js 서버에서는 process.env를 사용합니다.
+ * [DEBUG] 환경 변수 로드 확인용 로그
+ * 이 로그는 브라우저 콘솔에서 확인할 수 있습니다.
  */
-const getEnv = (key: string) => {
-  // 1. Vite 클라이언트 환경 (빌드 타임 치환)
-  if (typeof import.meta !== "undefined" && import.meta.env) {
-    return import.meta.env[key];
-  }
-  // 2. Node.js 서버 환경
-  if (typeof process !== "undefined" && process.env) {
-    return process.env[key];
-  }
-  return undefined;
-};
+console.log("[Supabase Debug] Environment Info:", {
+  isBrowser: typeof window !== "undefined",
+  viteUrlValue: import.meta.env?.VITE_SUPABASE_URL,
+  processUrlValue: typeof process !== "undefined" ? process.env?.VITE_SUPABASE_URL : "N/A",
+  // 보안을 위해 키는 일부만 노출
+  hasAnonKey: !!(import.meta.env?.VITE_SUPABASE_ANON_KEY || (typeof process !== "undefined" && process.env?.VITE_SUPABASE_ANON_KEY)),
+});
 
-const supabaseUrl = getEnv("VITE_SUPABASE_URL");
-const supabaseAnonKey = getEnv("VITE_SUPABASE_ANON_KEY");
+/**
+ * Vite의 정적 분석(Static Replacement)을 위해 환경 변수를 명시적으로 참조합니다.
+ */
+const VITE_SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+const VITE_SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
-// 런타임 에러 방지를 위한 유효성 체크 및 폴백
+// Node.js 서버 환경을 위한 폴백
+const PROCESS_SUPABASE_URL = typeof process !== "undefined" ? process.env?.VITE_SUPABASE_URL : undefined;
+const PROCESS_SUPABASE_ANON_KEY = typeof process !== "undefined" ? process.env?.VITE_SUPABASE_ANON_KEY : undefined;
+
+const supabaseUrl = VITE_SUPABASE_URL || PROCESS_SUPABASE_URL;
+const supabaseAnonKey = VITE_SUPABASE_ANON_KEY || PROCESS_SUPABASE_ANON_KEY;
+
+// URL 유효성 검사
 const isValidUrl = (url: string | undefined): url is string => {
+  if (!url) return false;
   try {
-    return !!url && (url.startsWith("http://") || url.startsWith("https://"));
+    return url.startsWith("http://") || url.startsWith("https://");
   } catch {
     return false;
   }
 };
 
-if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
-  console.error("❌ Supabase 설정 오류: VITE_SUPABASE_URL 또는 VITE_SUPABASE_ANON_KEY가 유효하지 않습니다.", {
-    url: supabaseUrl,
-    hasKey: !!supabaseAnonKey,
+// 런타임 에러 방지를 위한 처리
+const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : "https://missing-url.supabase.co";
+
+if (!isValidUrl(supabaseUrl)) {
+  console.warn("⚠️ [Supabase] VITE_SUPABASE_URL 환경 변수가 누락되었습니다.", { 
+    detectedUrl: supabaseUrl 
   });
 }
 
-// createClient에 유효하지 않은 URL이 들어가지 않도록 처리
-export const supabase = createClient(
-  isValidUrl(supabaseUrl) ? supabaseUrl : "https://placeholder-url.supabase.co",
-  supabaseAnonKey || "",
-  {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-    },
-  }
-);
+export const supabase = createClient(finalUrl, supabaseAnonKey || "", {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
 
 export function getSupabaseAdmin() {
-  const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRoleKey = typeof process !== "undefined" ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined;
+  
   if (!serviceRoleKey) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY 환경 변수가 설정되지 않았습니다.");
   }
 
-  return createClient(supabaseUrl || "", serviceRoleKey, {
+  return createClient(finalUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
