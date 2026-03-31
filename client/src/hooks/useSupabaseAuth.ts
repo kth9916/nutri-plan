@@ -1,11 +1,11 @@
 /**
  * Supabase Auth 훅
- * 
+ *
  * 아키텍처 설계:
  * - 기존 Manus OAuth useAuth 훅을 Supabase Auth로 교체
  * - 간단한 인터페이스: user, loading, isAuthenticated, logout
  * - 실시간 세션 감지 (onAuthStateChange)
- * 
+ *
  * 이 방식을 선택한 이유:
  * 1. 단순성: Supabase 공식 API를 직접 래핑하기만 함
  * 2. 타입 안정성: Supabase User 타입 그대로 사용
@@ -13,8 +13,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import { supabase } from "../../../lib/supabase";
 
 interface UseAuthReturn {
   user: User | null;
@@ -50,6 +50,11 @@ export function useSupabaseAuth(): UseAuthReturn {
     await supabase.auth.signOut();
     setUser(null);
   };
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+    setUser(session?.user ?? null);
+    setLoading(false);
+  });
 
   const getLoginUrl = () => {
     // Supabase 로그인 페이지 URL
