@@ -15,11 +15,13 @@ import Notifications from "./pages/Notifications";
 import Subscription from "./pages/Subscription";
 
 import Login from "./pages/Login";
+import UpdatePassword from "./pages/UpdatePassword";
 
 /**
  * 라우트 구조:
  * / → 랜딩 페이지 (공개)
  * /login → 통합 로그인 페이지 (공개)
+ * /update-password → 비밀번호 재설정 페이지 (복구 링크 진입용)
  * /pricing → 가격 정책 페이지 (공개)
  * /dashboard → 대시보드 홈 (인증 필요)
  * /dashboard/upload → 엑셀 업로드 (인증 필요)
@@ -42,6 +44,7 @@ function Router() {
       {/* Public Routes */}
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/update-password" component={UpdatePassword} />
       <Route path="/pricing" component={Pricing} />
 
       {/* Dashboard Routes (Auth Required) */}
