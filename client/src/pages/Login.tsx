@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Sparkles, ArrowLeft, Mail, LogIn } from "lucide-react";
-import { supabase } from "@/../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
