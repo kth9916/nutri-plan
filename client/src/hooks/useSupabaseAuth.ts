@@ -35,10 +35,10 @@ export function useSupabaseAuth(): UseAuthReturn {
       setLoading(false);
     });
 
-    // 실시간 인증 상태 변화 감지
+    // 실시간 인증 상태 변화 감지 (타입 에러 _event: string, session: any 로 수정)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
@@ -51,15 +51,8 @@ export function useSupabaseAuth(): UseAuthReturn {
     setUser(null);
   };
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
-    setUser(session?.user ?? null);
-    setLoading(false);
-  });
-
   const getLoginUrl = () => {
     // Supabase 로그인 페이지 URL
-    // 실제로는 Supabase Auth UI 컴포넌트를 사용하거나
-    // 커스텀 로그인 페이지에서 supabase.auth.signInWithPassword() 호출
     return "/login";
   };
 
