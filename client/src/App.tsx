@@ -14,9 +14,12 @@ import Files from "./pages/Files";
 import Notifications from "./pages/Notifications";
 import Subscription from "./pages/Subscription";
 
+import Login from "./pages/Login";
+
 /**
  * 라우트 구조:
  * / → 랜딩 페이지 (공개)
+ * /login → 통합 로그인 페이지 (공개)
  * /pricing → 가격 정책 페이지 (공개)
  * /dashboard → 대시보드 홈 (인증 필요)
  * /dashboard/upload → 엑셀 업로드 (인증 필요)
@@ -38,6 +41,7 @@ function Router() {
     <Switch>
       {/* Public Routes */}
       <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
       <Route path="/pricing" component={Pricing} />
 
       {/* Dashboard Routes (Auth Required) */}

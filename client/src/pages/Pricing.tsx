@@ -28,8 +28,8 @@ export default function Pricing() {
       window.location.href = getLoginUrl();
       return;
     }
-    // Pro 플랜 결제 페이지로 이동
-    navigate("/payment");
+    // Pro 플랜 결제 관리 페이지(PortOne 연동됨)로 이동
+    navigate("/dashboard/subscription");
   };
 
   const handleFreePlan = () => {
