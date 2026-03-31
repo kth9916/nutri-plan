@@ -36,14 +36,22 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+import { supabase } from "../../lib/supabase";
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      fetch(input, init) {
+      fetch: async (input, init) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers = new Headers(init?.headers);
+        if (session?.access_token) {
+          headers.set("Authorization", `Bearer ${session.access_token}`);
+        }
         return globalThis.fetch(input, {
           ...(init ?? {}),
+          headers,
           credentials: "include",
         });
       },

@@ -257,41 +257,49 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
-    const cookies = this.parseCookies(req.headers.cookie);
-    const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
+    // Supabase JWT Auth Flow
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw ForbiddenError("Missing or invalid Authorization header");
+    }
+    const token = authHeader.split(" ")[1];
 
-    if (!session) {
-      throw ForbiddenError("Invalid session cookie");
+    // lib/supabase.ts의 Admin Client를 동적으로 가져와서 검증
+    const { getSupabaseAdmin } = await import("../../lib/supabase");
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: { user: authUser }, error } = await supabaseAdmin.auth.getUser(token);
+
+    if (error || !authUser) {
+      console.error("[Auth] Supabase token verification failed:", error);
+      throw ForbiddenError("Invalid session token");
     }
 
-    const sessionUserId = session.openId;
+    const sessionUserId = authUser.id;
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, sync from OAuth server automatically
+    // DB에 유저가 없다면 Supabase 메타데이터를 기반으로 새로 생성 (소셜 로그인 등 최초 접속 시)
     if (!user) {
       try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+          openId: sessionUserId,
+          name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || null,
+          email: authUser.email ?? null,
+          loginMethod: authUser.app_metadata?.provider ?? "email",
           lastSignedIn: signedInAt,
         });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
+        user = await db.getUserByOpenId(sessionUserId);
+      } catch (upsertError) {
+        console.error("[Auth] Failed to sync user from Supabase:", upsertError);
         throw ForbiddenError("Failed to sync user info");
       }
     }
 
     if (!user) {
-      throw ForbiddenError("User not found");
+      throw ForbiddenError("User not found after sync");
     }
 
+    // 로그인 시간 업데이트
     await db.upsertUser({
       openId: user.openId,
       lastSignedIn: signedInAt,
