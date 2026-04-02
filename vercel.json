@@ -4,6 +4,7 @@
   "devCommand": "pnpm run dev",
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": "vite",
+  "outputDirectory": "dist/public",
   "headers": [
     {
       "source": "/(.*)",
