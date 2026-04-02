@@ -56,7 +56,7 @@ export default function Login() {
         // 이메일 인증이 꺼져있으면 바로 세션이 생성됨 → 대시보드로 이동
         if (signUpData.session) {
           toast.success("가입이 완료되었습니다!");
-          await refresh();
+          try { await refresh(); } catch (_) { /* ignore */ }
           window.location.href = "/dashboard";
           return;
         }
@@ -86,8 +86,8 @@ export default function Login() {
         }
         
         toast.success("로그인 성공!");
-        await refresh();
-        // window.location으로 전체 페이지 새로고침 → 확실한 인증 상태 반영
+        // refresh가 실패해도 리다이렉트는 무조건 진행
+        try { await refresh(); } catch (_) { /* ignore */ }
         window.location.href = "/dashboard";
         
       } else if (authMode === 'forgot_password') {
