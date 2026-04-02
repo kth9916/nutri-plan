@@ -1,45 +1,49 @@
 import express from "express";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
 /**
- * [자가 진단 4단계: 파일 시스템 실사]
+ * [자가 진단 4.1단계: ESM 호환 파일 스캐너]
  * 
- * Vercel 서버 내부의 실제 파일 구조를 탐색하여 경로 문제를 100% 규명합니다.
+ * __dirname 오류를 해결하고 서버 내부 파일 구조를 다시 확인합니다.
  */
 
 const app = express();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname_esm = path.dirname(__filename);
+
 app.get("/api/health", (req, res) => {
   const getDirContents = (dirPath: string) => {
     try {
-      const realPath = path.resolve(dirPath);
+      const realPath = path.resolve(process.cwd(), dirPath);
       if (fs.existsSync(realPath)) {
         return fs.readdirSync(realPath).join(", ");
       }
-      return "존재하지 않음";
+      return "(존재하지 않음)";
     } catch (e: any) {
-      return `오류: ${e.message}`;
+      return `(오류: ${e.message})`;
     }
   };
 
   const results = {
-    "현재 디렉토리 (.)": getDirContents("."),
-    "상위 디렉토리 (..)": getDirContents(".."),
-    "api 디렉토리 (./api)": getDirContents("./api"),
-    "server 디렉토리 (./server)": getDirContents("./server"),
-    "server/_core 디렉토리 (./server/_core)": getDirContents("./server/_core"),
-    "lib 디렉토리 (./lib)": getDirContents("./lib"),
-    "현재 폴더 절대경로 (__dirname)": __dirname,
     "작업 디렉토리 (process.cwd)": process.cwd(),
+    "현재 파일 위치 (__dirname_esm)": __dirname_esm,
+    "루트 폴더 (.)": getDirContents("."),
+    "api 폴더 (./api)": getDirContents("./api"),
+    "server 폴더 (./server)": getDirContents("./server"),
+    "server/_core 폴더 (./server/_core)": getDirContents("./server/_core"),
+    "lib 폴더 (./lib)": getDirContents("./lib"),
   };
 
-  let html = "<h1>Vercel 서버 파일 시스템 스캔</h1><ul>";
+  let html = "<div style='font-family: monospace; padding: 20px;'>";
+  html += "<h1>Vercel 서버 파일 시스템 스캔 (수정됨)</h1><ul>";
   for (const [key, value] of Object.entries(results)) {
     html += `<li><strong>${key}:</strong> ${value}</li>`;
   }
   html += "</ul>";
-  html += "<p>이 목록을 보고 정확한 임포트 경로를 확정하겠습니다.</p>";
+  html += "<p>에러가 나지 않고 이 화면이 보인다면, 이제 진짜 경로로 파일을 불러올 준비가 된 것입니다.</p></div>";
 
   res.status(200).send(html);
 });
