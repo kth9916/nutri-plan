@@ -57,52 +57,71 @@ const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 });
 const router = t.router;
 
-// 5. [인라인 복구] 핵심 라우터 기능 직접 구현
+// 7. [인라인 복구] 인증 라우터
+const authRouter = router({
+  me: publicProcedure.query(({ ctx }) => ctx.user || null),
+  logout: publicProcedure.mutation(async ({ ctx }) => {
+    // 로그아웃 로직 (쿠키 삭제 등 필요한 경우)
+    return { success: true };
+  }),
+});
+
+const mealPlanRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const db = getInlinedDb();
+    if (!db) return [];
+    return db.select().from(mealPlans).where(eq(mealPlans.userId, ctx.user.id)).orderBy(desc(mealPlans.createdAt));
+  }),
+});
+
+const notificationRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const db = getInlinedDb();
+    if (!db) return [];
+    return db.select().from(notifications).where(eq(notifications.userId, ctx.user.id)).orderBy(desc(notifications.createdAt)).limit(20);
+  }),
+});
+
+const usageRouter = router({
+  getDailyStats: protectedProcedure.query(async ({ ctx }) => {
+    const db = getInlinedDb();
+    const today = new Date().toISOString().split('T')[0];
+    let usage = null;
+    if (db) {
+      const result = await db.select().from(userDailyUsage)
+        .where(and(eq(userDailyUsage.userId, ctx.user.id), eq(userDailyUsage.date, today)))
+        .limit(1);
+      usage = result[0];
+    }
+    const isPro = (ctx.user as any).plan === "pro";
+    return {
+      generationMode: isPro ? "pro" : "free",
+      maxGenerations: isPro ? 10 : 1,
+      usedGenerations: usage?.generationCount || 0,
+      maxExchanges: isPro ? 50 : 5,
+      usedExchanges: usage?.exchangeCount || 0,
+    };
+  }),
+});
+
+// 전체 라우터 조립
 const appRouter = router({
-  auth: router({
-    me: publicProcedure.query(({ ctx }) => ctx.user || null),
-  }),
-  mealPlan: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      const db = getInlinedDb();
-      if (!db) return [];
-      return db.select().from(mealPlans).where(eq(mealPlans.userId, ctx.user.id)).orderBy(desc(mealPlans.createdAt));
-    }),
-  }),
-  notification: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      const db = getInlinedDb();
-      if (!db) return [];
-      return db.select().from(notifications).where(eq(notifications.userId, ctx.user.id)).orderBy(desc(notifications.createdAt)).limit(20);
-    }),
-  }),
-  usage: router({
-    getDailyStats: protectedProcedure.query(async ({ ctx }) => {
-      const db = getInlinedDb();
-      const today = new Date().toISOString().split('T')[0];
-      let usage = null;
-      if (db) {
-        const result = await db.select().from(userDailyUsage)
-          .where(and(eq(userDailyUsage.userId, ctx.user.id), eq(userDailyUsage.date, today)))
-          .limit(1);
-        usage = result[0];
-      }
-      const isPro = (ctx.user as any).plan === "pro";
-      return {
-        generationMode: isPro ? "pro" : "free",
-        maxGenerations: isPro ? 10 : 1,
-        usedGenerations: usage?.generationCount || 0,
-        maxExchanges: isPro ? 50 : 5,
-        usedExchanges: usage?.exchangeCount || 0,
-      };
-    }),
-  }),
+  auth: authRouter,
+  mealPlan: mealPlanRouter,
+  notification: notificationRouter,
+  usage: usageRouter,
   health: publicProcedure.query(() => ({ status: "fully_integrated" })),
 });
 
-// 6. Express 앱
+// 8. Express 앱 및 OAuth 콜백 핸들러 직접 구현
 const app = express();
 app.use(express.json());
+
+// [인라인 복구] OAuth 콜백 (Supabase 인증 후 호출됨)
+app.get("/api/oauth/callback", async (req, res) => {
+  // Supabase가 클라이언트에서 처리하지만, 만약 서버 사이드 콜백이 필요할 경우를 대비
+  res.redirect("/dashboard");
+});
 
 app.use(
   "/api/trpc",
@@ -114,17 +133,53 @@ app.use(
         try {
           const token = authHeader.split(" ")[1];
           const admin = getSupabaseAdmin();
-          const { data: { user: authUser } } = await admin.auth.getUser(token);
+          const { data: { user: authUser }, error } = await admin.auth.getUser(token);
           
-          if (authUser) {
+          if (error) {
+            console.error("[Auth] Supabase token verification failed:", error.message);
+          }
+
+          if (authUser && !error) {
+            console.log("[Auth] Supabase user verified:", authUser.id);
             const db = getInlinedDb();
             if (db) {
-              const res = await db.select().from(users).where(eq(users.openId, authUser.id)).limit(1);
-              if (res[0]) return { req: opts.req, res: opts.res, user: res[0] };
+              // 1. 유저 정보 조회
+              let res = await db.select().from(users).where(eq(users.openId, authUser.id)).limit(1);
+              let userRecord = res[0];
+
+              // 2. 유저가 DB에 없으면 즉시 생성 (SSO 로그인 등 최초 접속)
+              if (!userRecord) {
+                console.log("[Auth] New user detected, creating DB record for:", authUser.id);
+                const newUser = {
+                  openId: authUser.id,
+                  email: authUser.email || "",
+                  name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "User",
+                  lastSignedIn: new Date(),
+                  role: "user",
+                  plan: "free"
+                };
+                try {
+                  await db.insert(users).values(newUser).onConflictDoUpdate({
+                    target: users.openId,
+                    set: { lastSignedIn: new Date() }
+                  });
+                  res = await db.select().from(users).where(eq(users.openId, authUser.id)).limit(1);
+                  userRecord = res[0];
+                  console.log("[Auth] DB user created/updated successfully");
+                } catch (dbErr) {
+                  console.error("[Auth] DB sync failed:", dbErr);
+                }
+              } else {
+                // 로그인 시간 업데이트
+                await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userRecord.id));
+                console.log("[Auth] Existing user session updated");
+              }
+              
+              if (userRecord) return { req: opts.req, res: opts.res, user: userRecord };
             }
           }
         } catch (e) {
-          console.error("[Auth Failure]", e);
+          console.error("[Auth Failure] Unexpected error:", e);
         }
       }
       return { req: opts.req, res: opts.res, user: null };
