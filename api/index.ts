@@ -56,15 +56,26 @@ app.all("/api/trpc/:path", async (req, res, next) => {
   }
 });
 
-// OAuth 콜백 핸들러 (지연 로딩 방식)
-app.get("/api/oauth/callback", async (req, res) => {
+// 자가 진단용 다이렉트 엔드포인트 (브라우저 주소창에서 바로 확인 가능)
+app.get("/api/debug", async (req, res) => {
   try {
-    const { registerOAuthRoutes } = await import("../server/_core/oauth");
-    const tempApp = express();
-    registerOAuthRoutes(tempApp);
-    return (tempApp as any).handle(req, res);
-  } catch (error) {
-    return sendFatalError(res, error, "Module Loading (OAuth)");
+    const { appRouter } = await import("../server/routers");
+    const { createContext } = await import("../server/_core/context");
+    res.status(200).send(`
+      <h1>서버 자가 진단 (정상 로딩됨)</h1>
+      <p>서버 모듈들이 정상적으로 로드되었습니다.</p>
+      <hr/>
+      <p>만약 로그인이 안 된다면 DB 연결이나 환경 변수 값을 다시 확인하세요.</p>
+    `);
+  } catch (error: any) {
+    res.status(500).send(`
+      <h1 style="color: red;">서버 크래시 진단 결과</h1>
+      <p><strong>단계:</strong> Module Loading</p>
+      <p><strong>에러 메시지:</strong> ${error.message}</p>
+      <pre style="background: #f4f4f4; padding: 10px; border: 1px solid #ccc;">${error.stack}</pre>
+      <hr/>
+      <p><strong>조치 방법:</strong> 위 에러 메시지를 복사해서 개발자에게 전달하세요.</p>
+    `);
   }
 });
 
