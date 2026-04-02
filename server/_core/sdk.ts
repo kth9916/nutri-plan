@@ -317,4 +317,20 @@ class SDKServer {
   }
 }
 
-export const sdk = new SDKServer();
+/**
+ * SDKServer 지연 초기화 Proxy
+ * 
+ * 왜 이 방식인가요?
+ * 1. 최상단 'new SDKServer()' 호출은 에러 발생 시 서버 초기화 자체를 중단시킵니다.
+ * 2. Proxy를 사용하면 실제 로직이 필요한 시점에 객체가 생성되므로 환경 변수 로드 문제 등을 회피할 수 있습니다.
+ */
+let _sdkInstance: SDKServer | null = null;
+export const sdk = new Proxy({} as SDKServer, {
+  get(_, prop) {
+    if (!_sdkInstance) {
+      _sdkInstance = new SDKServer();
+    }
+    const value = (_sdkInstance as any)[prop];
+    return typeof value === "function" ? value.bind(_sdkInstance) : value;
+  },
+});
