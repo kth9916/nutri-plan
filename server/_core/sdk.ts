@@ -52,7 +52,7 @@ class OAuthService {
   ): Promise<ExchangeTokenResponse> {
     this.ensureInitialized();
     const payload: ExchangeTokenRequest = {
-      clientId: INTERNAL_ENV.appId || ENV.appId, // api/index.ts에 정의된 INTERNAL_ENV 우선 시도
+      clientId: ENV.appId,
       grantType: "authorization_code",
       code,
       redirectUri: this.decodeState(state),
@@ -66,7 +66,19 @@ class OAuthService {
     return data;
   }
 
-  // ... 나머지 메서드들에도 ensureInitialized() 추가 ...
+  async getUserInfoByToken(
+    token: ExchangeTokenResponse
+  ): Promise<GetUserInfoResponse> {
+    this.ensureInitialized();
+    const { data } = await this.client.post<GetUserInfoResponse>(
+      GET_USER_INFO_PATH,
+      {
+        accessToken: token.accessToken,
+      }
+    );
+
+    return data;
+  }
 }
 
 class SDKServer {
@@ -77,21 +89,19 @@ class SDKServer {
     // 생성자에서 아무것도 하지 않음 (지뢰 제거)
   }
 
-  private get client(): AxiosInstance {
+  private initIfNeeded() {
     if (!this._client) {
       this._client = axios.create({
         baseURL: ENV.oAuthServerUrl,
         timeout: AXIOS_TIMEOUT_MS,
       });
+      this._oauthService = new OAuthService(this._client);
     }
-    return this._client;
   }
 
   private get oauthService(): OAuthService {
-    if (!this._oauthService) {
-      this._oauthService = new OAuthService(this.client);
-    }
-    return this._oauthService;
+    this.initIfNeeded();
+    return this._oauthService!;
   }
 
   private deriveLoginMethod(
@@ -238,12 +248,13 @@ class SDKServer {
   async getUserInfoWithJwt(
     jwtToken: string
   ): Promise<GetUserInfoWithJwtResponse> {
+    this.initIfNeeded();
     const payload: GetUserInfoWithJwtRequest = {
       jwtToken,
       projectId: ENV.appId,
     };
 
-    const { data } = await this.client.post<GetUserInfoWithJwtResponse>(
+    const { data } = await this._client!.post<GetUserInfoWithJwtResponse>(
       GET_USER_INFO_WITH_JWT_PATH,
       payload
     );
