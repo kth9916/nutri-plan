@@ -39,7 +39,7 @@ export default function Login() {
           return;
         }
         
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -52,6 +52,15 @@ export default function Login() {
         });
         
         if (error) throw error;
+
+        // 이메일 인증이 꺼져있으면 바로 세션이 생성됨 → 대시보드로 이동
+        if (signUpData.session) {
+          toast.success("가입이 완료되었습니다!");
+          await refresh();
+          window.location.href = "/dashboard";
+          return;
+        }
+        
         toast.success("가입이 완료되었습니다! 가입 승인을 위해 메일함을 확인해주세요.");
         setAuthMode('login');
         setPassword("");
@@ -78,7 +87,8 @@ export default function Login() {
         
         toast.success("로그인 성공!");
         await refresh();
-        navigate("/dashboard");
+        // window.location으로 전체 페이지 새로고침 → 확실한 인증 상태 반영
+        window.location.href = "/dashboard";
         
       } else if (authMode === 'forgot_password') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
