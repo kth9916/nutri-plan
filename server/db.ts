@@ -32,22 +32,29 @@ const globalForPostgres = global as unknown as {
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      if (!globalForPostgres.postgres) {
-        globalForPostgres.postgres = postgres(process.env.DATABASE_URL, {
-          prepare: false,
-          idle_timeout: 20,
-          max: 1,
-        });
-      }
-      _db = drizzle(globalForPostgres.postgres);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
+  if (_db) return _db;
+
+  const dbUrl = ENV.databaseUrl || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.warn("[Database] DATABASE_URL is missing. Connection skipped.");
+    return null;
   }
-  return _db;
+
+  try {
+    if (!globalForPostgres.postgres) {
+      globalForPostgres.postgres = postgres(dbUrl, {
+        prepare: false,
+        idle_timeout: 20,
+        max: 1,
+      });
+    }
+    _db = drizzle(globalForPostgres.postgres);
+    return _db;
+  } catch (error) {
+    console.error("[Database] Critical connection error:", error);
+    _db = null;
+    return null;
+  }
 }
 
 // ===================== USER =====================
