@@ -14,10 +14,10 @@ import superjson from "superjson";
 
 const app = express();
 
-// tRPC 표준 에러 형식으로 응답하여 클라이언트 콘솔에서 바로 확인할 수 있게 합니다.
+// tRPC 표준 에러 형식으로 응답하며, superjson으로 직렬화하여 클라이언트가 읽을 수 있게 합니다.
 const sendFatalError = (res: express.Response, error: any, stage: string) => {
   console.error(`[Fatal Startup Error] @ ${stage}:`, error);
-  res.status(500).json({
+  const errorPayload = {
     error: {
       message: `[서버 초기화 에러] ${stage}: ${error instanceof Error ? error.message : String(error)}`,
       code: -32603, // INTERNAL_SERVER_ERROR
@@ -29,7 +29,10 @@ const sendFatalError = (res: express.Response, error: any, stage: string) => {
         suggestion: "이 로그가 보인다면 특정 파일의 import 단계에서 문법 오류나 환경 변수 누락이 발생한 것입니다."
       }
     }
-  });
+  };
+
+  // 클라이언트가 superjson을 사용하므로 서버도 결과를 superjson으로 감싸서 보내야 합니다.
+  res.status(500).json(superjson.serialize(errorPayload));
 };
 
 app.use(express.json({ limit: "50mb" }));
