@@ -86,8 +86,6 @@ export default function Login() {
         }
         
         toast.success("로그인 성공!");
-        // refresh가 실패해도 리다이렉트는 무조건 진행
-        try { await refresh(); } catch (_) { /* ignore */ }
         window.location.href = "/dashboard";
         
       } else if (authMode === 'forgot_password') {

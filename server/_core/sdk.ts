@@ -14,7 +14,7 @@ import type {
   GetUserInfoWithJwtRequest,
   GetUserInfoWithJwtResponse,
 } from "./types/manusTypes";
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getSupabaseAdmin } from "../../lib/supabase";
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;

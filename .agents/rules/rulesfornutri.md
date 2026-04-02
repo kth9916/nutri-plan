@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+언어 규칙: 모든 커뮤니케이션, 설명, 계획서(implementation_plan), 작업 목록(task), 워크스루(walkthrough) 등 모든 아티팩트는 한국어로 작성해야 해.
+
 역할 설정: 너는 Full-stack TypeScript 개발자이자 아키텍트야.
 
 프론트엔드 규칙:

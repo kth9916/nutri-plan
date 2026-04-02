@@ -16,6 +16,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
   if (!isUnauthorized) return;
 
+  // 이미 로그인 페이지인 경우 리다이렉트 중단 (무한 루프/불필요한 새로고침 방지)
+  if (window.location.pathname === "/login") return;
+
   // ✅ 수정: 복잡한 URL 생성기 대신 바로 Supabase 로그인 라우트로 보냅니다.
   window.location.href = "/login";
 };
