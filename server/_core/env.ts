@@ -1,17 +1,32 @@
+/**
+ * [환경 변수 안전화 작업]
+ * 
+ * Vercel 서버리스 환경에서 최신 문법(?. , ??)이 때때로 빌드 도구나 Node 버전에 따라 
+ * 최상단(Top-level) 크래시를 유발하는 경우가 있습니다. 
+ * 이를 가장 원시적이고 안전한 방식으로 재작성합니다.
+ */
+
+function getEnv(key: string, defaultValue: string = ""): string {
+  if (typeof process !== "undefined" && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+  return defaultValue;
+}
+
 export const ENV = {
-  appId: process?.env?.VITE_APP_ID ?? "",
-  cookieSecret: process?.env?.JWT_SECRET ?? "",
-  databaseUrl: process?.env?.DATABASE_URL ?? "",
-  oAuthServerUrl: process?.env?.OAUTH_SERVER_URL ?? "",
-  ownerOpenId: process?.env?.OWNER_OPEN_ID ?? "",
-  isProduction: process?.env?.NODE_ENV === "production",
-  tossSecretKey: process?.env?.TOSS_SECRET_KEY ?? "",
-  portoneApiKey: process?.env?.PORTONE_API_KEY ?? "",
-  portoneApiSecret: process?.env?.PORTONE_API_SECRET ?? "",
-  geminiApiKey: process?.env?.GEMINI_API_KEY ?? "",
-  forgeApiUrl: process?.env?.BUILT_IN_FORGE_API_URL ?? "",
-  forgeApiKey: process?.env?.BUILT_IN_FORGE_API_KEY ?? "",
-  supabaseUrl: process?.env?.VITE_SUPABASE_URL ?? "",
-  supabaseAnonKey: process?.env?.VITE_SUPABASE_ANON_KEY ?? "",
-  supabaseServiceRoleKey: process?.env?.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  appId: getEnv("VITE_APP_ID"),
+  cookieSecret: getEnv("JWT_SECRET"),
+  databaseUrl: getEnv("DATABASE_URL"),
+  oAuthServerUrl: getEnv("OAUTH_SERVER_URL"),
+  ownerOpenId: getEnv("OWNER_OPEN_ID"),
+  isProduction: (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "production"),
+  tossSecretKey: getEnv("TOSS_SECRET_KEY"),
+  portoneApiKey: getEnv("PORTONE_API_KEY"),
+  portoneApiSecret: getEnv("PORTONE_API_SECRET"),
+  geminiApiKey: getEnv("GEMINI_API_KEY"),
+  forgeApiUrl: getEnv("BUILT_IN_FORGE_API_URL"),
+  forgeApiKey: getEnv("BUILT_IN_FORGE_API_KEY"),
+  supabaseUrl: getEnv("VITE_SUPABASE_URL"),
+  supabaseAnonKey: getEnv("VITE_SUPABASE_ANON_KEY"),
+  supabaseServiceRoleKey: getEnv("SUPABASE_SERVICE_ROLE_KEY"),
 };
