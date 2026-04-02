@@ -14,7 +14,17 @@ import {
   Shield,
   Zap,
   ChevronRight,
+  User,
+  LogOut,
+  LayoutDashboard
 } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * NutriPlan 랜딩 페이지
@@ -27,7 +37,7 @@ import {
  * 구조: Hero → Features → How It Works → Pricing CTA → Footer
  */
 export default function Home() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const [, navigate] = useLocation();
 
   const handleGetStarted = () => {
@@ -56,9 +66,32 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3">
             {isAuthenticated ? (
-              <Button size="sm" onClick={() => navigate("/dashboard")}>
-                대시보드 <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 flex items-center gap-2 rounded-full pr-2 pl-2">
+                    <span className="text-sm font-medium">{user?.name}님</span>
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                        {user?.name?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-48" align="end" forceMount>
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    <span>대시보드</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/dashboard/mypage")}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>마이페이지</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>로그아웃</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <>
                 <Button variant="ghost" size="sm" onClick={() => { window.location.href = getLoginUrl(); }}>

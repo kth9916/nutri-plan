@@ -8,6 +8,7 @@ import {
   uploadedFiles,
   notifications,
   subscriptions,
+  userDailyUsage,
   type MealPlan,
   type MealDay,
   type UploadedFile,
@@ -17,6 +18,8 @@ import {
   type InsertUploadedFile,
   type InsertNotification,
   type InsertSubscription,
+  type UserDailyUsage,
+  type InsertUserDailyUsage,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -44,7 +47,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   try {
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "workplaceCategory"] as const;
 
     textFields.forEach((field) => {
       const value = user[field];
@@ -80,6 +83,52 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+// ===================== USER DAILY USAGE =====================
+
+export async function getDailyUsage(userId: number, date: string): Promise<UserDailyUsage> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  let usageResult = await db.select().from(userDailyUsage)
+    .where(and(eq(userDailyUsage.userId, userId), eq(userDailyUsage.date, date)))
+    .limit(1);
+
+  if (usageResult.length === 0) {
+    // Create if not exists
+    await db.insert(userDailyUsage).values({ userId, date });
+    usageResult = await db.select().from(userDailyUsage)
+      .where(and(eq(userDailyUsage.userId, userId), eq(userDailyUsage.date, date)))
+      .limit(1);
+  }
+  return usageResult[0];
+}
+
+export async function incrementDailyUsage(
+  userId: number,
+  date: string,
+  field: "generationCount" | "exchangeCount"
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Ensure record exists
+  await getDailyUsage(userId, date);
+
+  // We can just query again and manually increment or use raw sql if needed.
+  // Actually, selecting and updating is fine here since traffic is low.
+  const record = (await db.select().from(userDailyUsage).where(and(eq(userDailyUsage.userId, userId), eq(userDailyUsage.date, date))).limit(1))[0];
+  
+  await db.update(userDailyUsage)
+    .set({ [field]: record[field] + 1 })
+    .where(eq(userDailyUsage.id, record.id));
+}
+
+export async function updateUserCategory(userId: number, workplaceCategory: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ workplaceCategory }).where(eq(users.id, userId));
 }
 
 // ===================== MEAL PLANS =====================

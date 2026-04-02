@@ -17,6 +17,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [workplaceCategory, setWorkplaceCategory] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,6 +45,7 @@ export default function Login() {
           options: {
             data: {
               name,
+              workplaceCategory,
             },
             emailRedirectTo: `${window.location.origin}/dashboard`
           }
@@ -149,17 +151,36 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4 mb-2">
             {authMode === 'signup' && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground pl-1">이름 (닉네임)</label>
-                <Input
-                  type="text"
-                  placeholder="홍길동"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="h-12 rounded-xl bg-background/50 border-border/50 focus-visible:ring-primary/20"
-                  disabled={isLoading}
-                />
-              </div>
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground pl-1">이름 (닉네임)</label>
+                  <Input
+                    type="text"
+                    placeholder="홍길동"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-12 rounded-xl bg-background/50 border-border/50 focus-visible:ring-primary/20"
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground pl-1">소속 장소 (선택)</label>
+                  <select
+                    value={workplaceCategory}
+                    onChange={(e) => setWorkplaceCategory(e.target.value)}
+                    className="flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isLoading}
+                  >
+                    <option value="" disabled>영양사님 근무처를 선택해주세요</option>
+                    <option value="학교">학교</option>
+                    <option value="공장">공장 및 기업체</option>
+                    <option value="병원">병원 및 보건소</option>
+                    <option value="사회복지시설">사회복지시설</option>
+                    <option value="호텔">호텔 및 레스토랑</option>
+                    <option value="기타">기타</option>
+                  </select>
+                </div>
+              </>
             )}
             
             <div className="space-y-1">

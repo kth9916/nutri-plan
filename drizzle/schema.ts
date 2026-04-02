@@ -8,6 +8,7 @@ import {
   boolean,
   json,
   decimal,
+  unique,
 } from "drizzle-orm/mysql-core";
 
 /**
@@ -21,6 +22,7 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  workplaceCategory: varchar("workplaceCategory", { length: 128 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   /**
    * 구독 플랜: free(무료) / pro(유료)
@@ -109,6 +111,7 @@ export const mealPlans = mysqlTable("meal_plans", {
   year: int("year").notNull(),
   month: int("month").notNull(),
   title: varchar("title", { length: 255 }),
+  requestPrompt: text("requestPrompt"),
   status: mysqlEnum("status", ["draft", "confirmed"])
     .default("draft")
     .notNull(),
@@ -220,3 +223,27 @@ export const mealPlanUsage = mysqlTable("meal_plan_usage", {
 
 export type MealPlanUsage = typeof mealPlanUsage.$inferSelect;
 export type InsertMealPlanUsage = typeof mealPlanUsage.$inferInsert;
+
+/**
+ * 일별 AI 사용량 추적 테이블
+ * - date: YYYY-MM-DD 형식
+ * - Free: 일일 식단 생성 1회, 교환 5회 제한
+ * - Pro: 일일 식단 생성 10회, 교환 50회 제한
+ */
+export const userDailyUsage = mysqlTable("user_daily_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .references(() => users.id),
+  date: varchar("date", { length: 10 }).notNull(),
+  generationCount: int("generationCount").default(0).notNull(),
+  exchangeCount: int("exchangeCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  userDateIdx: unique("user_date_idx").on(table.userId, table.date),
+}));
+
+export type UserDailyUsage = typeof userDailyUsage.$inferSelect;
+export type InsertUserDailyUsage = typeof userDailyUsage.$inferInsert;
+

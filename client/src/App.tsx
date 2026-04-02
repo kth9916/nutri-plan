@@ -13,6 +13,7 @@ import MealPlanDetail from "./pages/MealPlanDetail";
 import Files from "./pages/Files";
 import Notifications from "./pages/Notifications";
 import Subscription from "./pages/Subscription";
+import MyPage from "./pages/MyPage";
 
 import Login from "./pages/Login";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/dashboard/files" component={Files} />
       <Route path="/dashboard/notifications" component={Notifications} />
       <Route path="/dashboard/subscription" component={Subscription} />
+      <Route path="/dashboard/mypage" component={MyPage} />
 
       {/* Fallback */}
       <Route path="/404" component={NotFound} />

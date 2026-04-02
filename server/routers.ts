@@ -22,6 +22,9 @@ import {
   createSubscription,
   completePayment,
   failPayment,
+  getDailyUsage,
+  incrementDailyUsage,
+  updateUserCategory,
 } from "./db";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
@@ -84,6 +87,16 @@ const mealPlanRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { year, month, sourceFileId, fileAnalysis, preferences } = input;
+      const today = new Date().toISOString().split('T')[0];
+      const dailyUsage = await getDailyUsage(ctx.user.id, today);
+      const isPro = (ctx.user as any).plan === "pro" || (ctx.user as any).subscription_plan === "pro";
+      const maxGenerations = isPro ? 10 : 1;
+      
+      if (dailyUsage.generationCount >= maxGenerations) {
+        throw new Error(`일일 식단 생성 한도(${maxGenerations}회)를 초과했습니다. 내일 다시 시도해주세요.`);
+      }
+
+      const userPreferences = preferences || (fileAnalysis ? `기존 데이터: ${fileAnalysis}` : undefined);
 
       // 1. 식단 플랜 레코드 생성
       const planId = await createMealPlan({
@@ -92,11 +105,10 @@ const mealPlanRouter = router({
         month,
         sourceFileId,
         title: `${year}년 ${month}월 식단`,
+        requestPrompt: userPreferences,
         status: "draft",
       });
 
-      // 2. AiDietService를 통해 AI 식단 생성 (모델 폴백 로직 포함)
-      const userPreferences = preferences || (fileAnalysis ? `기존 데이터: ${fileAnalysis}` : undefined);
       const parsed = await AiDietService.generateMonthlyMealPlan(
         year,
         month,
@@ -136,6 +148,8 @@ const mealPlanRouter = router({
         content: `${year}년 ${month}월 AI 식단이 생성되었습니다. 달력에서 확인하고 승인해주세요.`,
       });
 
+      await incrementDailyUsage(ctx.user.id, today, "generationCount");
+
       return { planId, daysCount: mealDaysData.length };
     }),
 
@@ -162,10 +176,21 @@ const mealPlanRouter = router({
   replaceDay: protectedProcedure
     .input(z.object({ dayId: z.number(), planId: z.number(), candidateIndex: z.number(), meals: z.any(), nutritionInfo: z.any() }))
     .mutation(async ({ ctx, input }) => {
+      const today = new Date().toISOString().split('T')[0];
+      const dailyUsage = await getDailyUsage(ctx.user.id, today);
+      const isPro = (ctx.user as any).plan === "pro" || (ctx.user as any).subscription_plan === "pro";
+      const maxExchanges = isPro ? 50 : 5;
+      
+      if (dailyUsage.exchangeCount >= maxExchanges) {
+        throw new Error(`일일 메뉴 교환 한도(${maxExchanges}회)를 초과했습니다. 내일 다시 시도해주세요.`);
+      }
+
       const plan = await getMealPlanById(input.planId, ctx.user.id);
       if (!plan) throw new Error("권한이 없습니다.");
       // selectedCandidateIndex 업데이트 (실제 메뉴는 프론트엔드에서 관리)
       await replaceMealDay(input.dayId, input.planId, input.meals, input.nutritionInfo);
+      
+      await incrementDailyUsage(ctx.user.id, today, "exchangeCount");
       return { success: true };
     }),
 
@@ -505,6 +530,27 @@ const authRouter = router({
     ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     return { success: true } as const;
   }),
+  updateCategory: protectedProcedure
+    .input(z.object({ workplaceCategory: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await updateUserCategory(ctx.user.id, input.workplaceCategory);
+      return { success: true };
+    }),
+});
+
+const usageRouter = router({
+  getDailyStats: protectedProcedure.query(async ({ ctx }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const dailyUsage = await getDailyUsage(ctx.user.id, today);
+    const isPro = (ctx.user as any).plan === "pro" || (ctx.user as any).subscription_plan === "pro";
+    return {
+      generationMode: isPro ? "pro" : "free",
+      maxGenerations: isPro ? 10 : 1,
+      usedGenerations: dailyUsage.generationCount,
+      maxExchanges: isPro ? 50 : 5,
+      usedExchanges: dailyUsage.exchangeCount,
+    };
+  }),
 });
 
 // ===================== APP ROUTER =====================
@@ -517,6 +563,7 @@ export const appRouter = router({
   notification: notificationRouter,
   payment: paymentRouter,
   export: exportRouter,
+  usage: usageRouter,
 });
 
 export type AppRouter = typeof appRouter;

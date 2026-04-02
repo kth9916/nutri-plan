@@ -286,6 +286,7 @@ class SDKServer {
           name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || null,
           email: authUser.email ?? null,
           loginMethod: authUser.app_metadata?.provider ?? "email",
+          workplaceCategory: authUser.user_metadata?.workplaceCategory || null,
           lastSignedIn: signedInAt,
         });
         user = await db.getUserByOpenId(sessionUserId);

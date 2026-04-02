@@ -23,6 +23,7 @@ export interface User {
   email: string;
   name: string | null;
   avatar_url: string | null;
+  workplace_category: string | null;
   subscription_plan: "free" | "pro";
   created_at: string;
   updated_at: string;
@@ -79,7 +80,9 @@ export interface MealPlan {
   year: number;
   month: number;
   source_file_id: number | null;
-  status: "generating" | "pending_review" | "confirmed";
+  title: string | null;
+  request_prompt: string | null;
+  status: "generating" | "draft" | "pending_review" | "confirmed";
   confirmed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -193,6 +196,16 @@ export interface MealPlanUsage {
   month: number;
   generation_count: number;
   max_count: number; // Free: 1, Pro: 10
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserDailyUsage {
+  id: number;
+  user_id: string;
+  date: string;
+  generation_count: number;
+  exchange_count: number;
   created_at: string;
   updated_at: string;
 }
