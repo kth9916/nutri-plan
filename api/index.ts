@@ -7,6 +7,7 @@ import { z } from "zod";
 
 // [주의] 절대로 ../server/db.js를 직접 임포트하지 않습니다. (500 에러의 원인)
 // 대신 필요한 DB 조회 로직을 여기서 직접 구현하거나 안전한 라이브러리만 사용합니다.
+import { Buffer } from "node:buffer";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
@@ -46,28 +47,39 @@ function generateId(length = 10) {
   return result;
 }
 
-// [인라인 복구] 스토리지 업로드 유틸리티 (storage.ts 대체)
+// [인라인 복구] 스토리지 업로드 유틸리티 (Forge API 대신 Supabase Storage 사용)
 async function storagePutInlined(relKey: string, data: any, contentType: string) {
-  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    throw new Error("Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY");
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase Admin client not initialized");
+  
+  const bucketName = 'files';
+  const cleanKey = relKey.replace(/^\/+/, "");
+  
+  // 1. 버킷 존재 여부 확인 및 자동 생성 시도
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.find(b => b.id === bucketName)) {
+      await supabase.storage.createBucket(bucketName, { public: true });
+    }
+  } catch (err) {
+    console.error("[Storage] Bucket check/create failed, attempting upload anyway:", err);
   }
   
-  const baseUrl = ENV.forgeApiUrl.replace(/\/+$/, "");
-  const uploadUrl = new URL("v1/storage/upload", baseUrl + "/");
-  uploadUrl.searchParams.set("path", relKey.replace(/^\/+/, ""));
-  
-  const blob = new Blob([data], { type: contentType });
-  const formData = new FormData();
-  formData.append("file", blob, relKey.split("/").pop() || "file");
-  
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${ENV.forgeApiKey}` },
-    body: formData,
-  });
+  // 2. 업로드 (upsert: true로 덮어쓰기 허용)
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from(bucketName)
+    .upload(cleanKey, data, { 
+      contentType, 
+      upsert: true 
+    });
 
-  if (!response.ok) throw new Error(`Storage upload failed: ${response.statusText}`);
-  return await response.json();
+  if (uploadError) {
+    throw new Error(`Storage upload failed: ${uploadError.message} (Bucket: ${bucketName})`);
+  }
+
+  // 3. 퍼블릭 URL 가져오기
+  const { data: { publicUrl } } = supabase.storage.from(bucketName).getPublicUrl(cleanKey);
+  return { key: cleanKey, url: publicUrl };
 }
 
 // 2. DB 연결 (인라인 지연 초기화)
