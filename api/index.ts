@@ -25,13 +25,50 @@ import {
  */
 
 // 1. 핵심 설정
+// 1. 핵심 설정 (스토리지 관련 항목 추가)
 const ENV = {
   appId: process.env.VITE_APP_ID || "",
   supabaseUrl: process.env.VITE_SUPABASE_URL || "",
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   databaseUrl: process.env.DATABASE_URL || "",
+  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL || "",
+  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY || "",
 };
+
+// [인라인 복구] 간단한 ID 생성기 (nanoid 대체)
+function generateId(length = 10) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// [인라인 복구] 스토리지 업로드 유틸리티 (storage.ts 대체)
+async function storagePutInlined(relKey: string, data: any, contentType: string) {
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    throw new Error("Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY");
+  }
+  
+  const baseUrl = ENV.forgeApiUrl.replace(/\/+$/, "");
+  const uploadUrl = new URL("v1/storage/upload", baseUrl + "/");
+  uploadUrl.searchParams.set("path", relKey.replace(/^\/+/, ""));
+  
+  const blob = new Blob([data], { type: contentType });
+  const formData = new FormData();
+  formData.append("file", blob, relKey.split("/").pop() || "file");
+  
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ENV.forgeApiKey}` },
+    body: formData,
+  });
+
+  if (!response.ok) throw new Error(`Storage upload failed: ${response.statusText}`);
+  return await response.json();
+}
 
 // 2. DB 연결 (인라인 지연 초기화)
 let _db: any = null;
@@ -208,10 +245,9 @@ const appRouter = router({
         const db = getInlinedDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-        const { storagePut } = await import("../server/storage.js");
         const buffer = Buffer.from(input.fileContent, 'base64');
-        const fileKey = `${ctx.user.id}-files/${input.fileName}-${nanoid()}.xlsx`;
-        const { url } = await storagePut(fileKey, buffer, input.fileType);
+        const fileKey = `${ctx.user.id}-files/${input.fileName}-${generateId()}.xlsx`;
+        const { url } = await storagePutInlined(fileKey, buffer, input.fileType);
 
         const [newFile] = await db.insert(uploadedFiles).values({
           userId: ctx.user.id,
@@ -245,7 +281,6 @@ const appRouter = router({
 
         // exceljs 및 storage 동적 임포트
         const ExcelJS = (await import("exceljs")).default as any;
-        const { storagePut } = await import("../server/storage.js");
         
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet(`${plan.year}년 ${plan.month}월 식단`);
@@ -264,8 +299,8 @@ const appRouter = router({
         });
 
         const buffer = await workbook.xlsx.writeBuffer();
-        const fileKey = `${ctx.user.id}-exports/${plan.year}-${plan.month}-${nanoid()}.xlsx`;
-        const { url } = await storagePut(fileKey, buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        const fileKey = `${ctx.user.id}-exports/${plan.year}-${plan.month}-${generateId()}.xlsx`;
+        const { url } = await storagePutInlined(fileKey, buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
         return { url, fileName: `${plan.year}년 ${plan.month}월 식단.xlsx` };
       }),
