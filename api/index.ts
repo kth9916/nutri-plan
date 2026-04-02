@@ -14,15 +14,21 @@ import superjson from "superjson";
 
 const app = express();
 
-// Vercel 환경에서 상세 에러를 보기 위한 헬퍼
+// tRPC 표준 에러 형식으로 응답하여 클라이언트 콘솔에서 바로 확인할 수 있게 합니다.
 const sendFatalError = (res: express.Response, error: any, stage: string) => {
   console.error(`[Fatal Startup Error] @ ${stage}:`, error);
   res.status(500).json({
-    error: true,
-    stage,
-    message: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : "No stack trace available",
-    suggestion: "이 메시지가 보인다면 서버의 특정 파일이 로드되다가 죽은 것입니다. 에러 메시지를 확인하세요."
+    error: {
+      message: `[서버 초기화 에러] ${stage}: ${error instanceof Error ? error.message : String(error)}`,
+      code: -32603, // INTERNAL_SERVER_ERROR
+      data: {
+        code: "INTERNAL_SERVER_ERROR",
+        httpStatus: 500,
+        stack: error instanceof Error ? error.stack : undefined,
+        stage,
+        suggestion: "이 로그가 보인다면 특정 파일의 import 단계에서 문법 오류나 환경 변수 누락이 발생한 것입니다."
+      }
+    }
   });
 };
 
