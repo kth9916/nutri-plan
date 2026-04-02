@@ -1,26 +1,47 @@
 import express from "express";
-// 정적 임포트 경로를 정확하게 수정합니다.
-import { ENV } from "../server/_core/env";
-import { supabase } from "../lib/supabase"; // ../../가 아니라 ../ 입니다.
+import * as fs from "fs";
+import * as path from "path";
 
 /**
- * [자가 진단 3.1단계: 정적 임포트 경로 수정 테스트]
+ * [자가 진단 4단계: 파일 시스템 실사]
  * 
- * 1. env와 supabase를 올바른 경로로 불러옵니다.
- * 2. 만약 이 상태에서 /api/health가 잘 나온다면, 경로 문제가 500 에러의 주범이었습니다.
+ * Vercel 서버 내부의 실제 파일 구조를 탐색하여 경로 문제를 100% 규명합니다.
  */
 
 const app = express();
 
 app.get("/api/health", (req, res) => {
-  res.status(200).send(`
-    <h1>정적 임포트 테스트 (Stage 1.1) - 경로 수정 완료</h1>
-    <ul>
-      <li>✅ ENV: 정적 로드 성공 (appId: ${ENV.appId ? "설정됨" : "미설정"})</li>
-      <li>✅ Supabase: 정적 로드 성공 (지연 초기화 활성)</li>
-    </ul>
-    <p>이 메시지가 보인다면 경로 오류가 해결된 것입니다. 이제 routers.ts를 안전하게 불러올 수 있습니다.</p>
-  `);
+  const getDirContents = (dirPath: string) => {
+    try {
+      const realPath = path.resolve(dirPath);
+      if (fs.existsSync(realPath)) {
+        return fs.readdirSync(realPath).join(", ");
+      }
+      return "존재하지 않음";
+    } catch (e: any) {
+      return `오류: ${e.message}`;
+    }
+  };
+
+  const results = {
+    "현재 디렉토리 (.)": getDirContents("."),
+    "상위 디렉토리 (..)": getDirContents(".."),
+    "api 디렉토리 (./api)": getDirContents("./api"),
+    "server 디렉토리 (./server)": getDirContents("./server"),
+    "server/_core 디렉토리 (./server/_core)": getDirContents("./server/_core"),
+    "lib 디렉토리 (./lib)": getDirContents("./lib"),
+    "현재 폴더 절대경로 (__dirname)": __dirname,
+    "작업 디렉토리 (process.cwd)": process.cwd(),
+  };
+
+  let html = "<h1>Vercel 서버 파일 시스템 스캔</h1><ul>";
+  for (const [key, value] of Object.entries(results)) {
+    html += `<li><strong>${key}:</strong> ${value}</li>`;
+  }
+  html += "</ul>";
+  html += "<p>이 목록을 보고 정확한 임포트 경로를 확정하겠습니다.</p>";
+
+  res.status(200).send(html);
 });
 
 export default app;
