@@ -24,17 +24,24 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
+// 서버리스 환경에서 커넥션 유지를 위한 global 선언
+const globalForPostgres = global as unknown as {
+  postgres: ReturnType<typeof postgres> | undefined;
+};
+
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const client = postgres(process.env.DATABASE_URL, {
-        prepare: false,  // Supabase Transaction Pooler(6543) 필수 옵션
-        idle_timeout: 20,
-        max: 1,           // 서버리스 환경 최적화
-      });
-      _db = drizzle(client);
+      if (!globalForPostgres.postgres) {
+        globalForPostgres.postgres = postgres(process.env.DATABASE_URL, {
+          prepare: false,
+          idle_timeout: 20,
+          max: 1,
+        });
+      }
+      _db = drizzle(globalForPostgres.postgres);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

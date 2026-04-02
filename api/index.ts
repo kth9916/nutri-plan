@@ -40,5 +40,14 @@ app.use(
   })
 );
 
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("[Server Error]", err);
+  res.status(500).json({
+    error: true,
+    message: err.message || "Internal Server Error",
+  });
+});
+
 // Export the Express app as a Vercel Serverless Function
 export default app;

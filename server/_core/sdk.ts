@@ -14,6 +14,7 @@ import type {
   GetUserInfoWithJwtRequest,
   GetUserInfoWithJwtResponse,
 } from "./types/manusTypes";
+import { getSupabaseAdmin } from "../lib/supabase";
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -265,7 +266,6 @@ class SDKServer {
     const token = authHeader.split(" ")[1];
 
     // lib/supabase.ts의 Admin Client를 동적으로 가져와서 검증
-    const { getSupabaseAdmin } = await import("../../lib/supabase");
     const supabaseAdmin = getSupabaseAdmin();
     const { data: { user: authUser }, error } = await supabaseAdmin.auth.getUser(token);
 
