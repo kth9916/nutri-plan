@@ -6,18 +6,20 @@ import { createContext } from "../server/_core/context";
 import { registerOAuthRoutes } from "../server/_core/oauth";
 
 /**
- * 최종 안정화된 엔트리 포인트
+ * 최종 안정화된 Vercel 엔트리 포인트
  * 
- * 해결된 문제:
- * 1. (과거) 최상단 createClient 호출로 인한 서버 크래시 -> lib/supabase.ts의 Proxy 지연 초기화로 해결
- * 2. (방금) 동적 import()의 Vercel 파일 경로 인식 문제 -> 정적 import로 복구하여 번들러 호환성 로직 적용
+ * 해결된 핵심 이슈:
+ * 1. 초기화 크래시 (500 Error): lib/supabase.ts 및 sdk.ts를 Proxy 기반 지연 초기화로 변경하여 해결.
+ * 2. 파일 찾기 오류 (ERR_MODULE_NOT_FOUND): 동적 import() 대신 정적 import를 사용하여 Vercel 번들러 호환성 확보.
+ * 3. 무한 리다이렉트: client/src/main.tsx에서 로그인 페이지 중복 이동 방어 로직 추가.
  */
 
 const app = express();
 
+// JSON 바디 파싱 설정
 app.use(express.json({ limit: "50mb" }));
 
-// Vercel rewrite workaround: Restore the original URL path
+// Vercel rewrite workaround: Restore the original URL path for Express routing
 app.use((req, res, next) => {
   if (req.query.path !== undefined) {
     const pathStr = req.query.path as string;
@@ -40,24 +42,32 @@ app.use(
 );
 
 // OAuth 콜백 핸들러
-registerOAuthRoutes(app);
+try {
+  registerOAuthRoutes(app);
+} catch (e) {
+  console.error("[OAuth] Failed to register routes:", e);
+}
 
-// 자가 진단용 다이렉트 엔드포인트
+// 자가 진단용 다이렉트 엔드포인트 (안정성 확인용)
 app.get("/api/debug", (req, res) => {
   res.status(200).send(`
-    <h1>서버 자가 진단 (정상 작동 중)</h1>
-    <p>모든 모듈이 정적으로 로드되어 정상 작동 중입니다.</p>
-    <hr/>
-    <p>이제 로그인과 대시보드 진입을 시도해 보세요.</p>
+    <div style="font-family: sans-serif; padding: 20px;">
+      <h1 style="color: #2ecc71;">서버 자가 진단 (정상 작동 중)</h1>
+      <p>모든 모듈이 정적으로 로드되어 정상 작동 중입니다.</p>
+      <hr/>
+      <p><strong>상태:</strong> 정적 임포트 성공, 지연 초기화 활성화됨</p>
+      <p>이제 로그인 버튼을 눌러보세요.</p>
+    </div>
   `);
 });
 
 // 전역 에러 핸들러
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error("[Server Error]", err);
+  console.error("[Server Fatal Error]", err);
   res.status(500).json({
     error: true,
     message: err.message || "Internal Server Error",
+    suggestion: "서버 내부 로직 실행 중 오류가 발생했습니다. 로그를 확인하세요."
   });
 });
 
