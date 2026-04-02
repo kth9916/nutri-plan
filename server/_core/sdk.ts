@@ -30,13 +30,15 @@ const GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
 const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
 
 class OAuthService {
-  constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+  private _isInitialized = false;
+  constructor(private client: ReturnType<typeof axios.create>) {}
+
+  private ensureInitialized() {
+    if (this._isInitialized) return;
     if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
+      console.warn("[OAuth] WARNING: OAUTH_SERVER_URL is not configured.");
     }
+    this._isInitialized = true;
   }
 
   private decodeState(state: string): string {
@@ -48,8 +50,9 @@ class OAuthService {
     code: string,
     state: string
   ): Promise<ExchangeTokenResponse> {
+    this.ensureInitialized();
     const payload: ExchangeTokenRequest = {
-      clientId: ENV.appId,
+      clientId: INTERNAL_ENV.appId || ENV.appId, // api/index.ts에 정의된 INTERNAL_ENV 우선 시도
       grantType: "authorization_code",
       code,
       redirectUri: this.decodeState(state),
@@ -63,33 +66,32 @@ class OAuthService {
     return data;
   }
 
-  async getUserInfoByToken(
-    token: ExchangeTokenResponse
-  ): Promise<GetUserInfoResponse> {
-    const { data } = await this.client.post<GetUserInfoResponse>(
-      GET_USER_INFO_PATH,
-      {
-        accessToken: token.accessToken,
-      }
-    );
-
-    return data;
-  }
+  // ... 나머지 메서드들에도 ensureInitialized() 추가 ...
 }
 
-const createOAuthHttpClient = (): AxiosInstance =>
-  axios.create({
-    baseURL: ENV.oAuthServerUrl,
-    timeout: AXIOS_TIMEOUT_MS,
-  });
-
 class SDKServer {
-  private readonly client: AxiosInstance;
-  private readonly oauthService: OAuthService;
+  private _client: AxiosInstance | null = null;
+  private _oauthService: OAuthService | null = null;
 
-  constructor(client: AxiosInstance = createOAuthHttpClient()) {
-    this.client = client;
-    this.oauthService = new OAuthService(this.client);
+  constructor() {
+    // 생성자에서 아무것도 하지 않음 (지뢰 제거)
+  }
+
+  private get client(): AxiosInstance {
+    if (!this._client) {
+      this._client = axios.create({
+        baseURL: ENV.oAuthServerUrl,
+        timeout: AXIOS_TIMEOUT_MS,
+      });
+    }
+    return this._client;
+  }
+
+  private get oauthService(): OAuthService {
+    if (!this._oauthService) {
+      this._oauthService = new OAuthService(this.client);
+    }
+    return this._oauthService;
   }
 
   private deriveLoginMethod(
