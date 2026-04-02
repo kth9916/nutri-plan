@@ -29,7 +29,11 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const client = postgres(process.env.DATABASE_URL);
+      const client = postgres(process.env.DATABASE_URL, {
+        prepare: false,  // Supabase Transaction Pooler(6543) 필수 옵션
+        idle_timeout: 20,
+        max: 1,           // 서버리스 환경 최적화
+      });
       _db = drizzle(client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
