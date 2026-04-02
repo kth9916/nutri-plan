@@ -1,82 +1,102 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// 1. 환경 변수 수집 (Vite & Node.js 호환)
-const getEnvValue = (key: string) => {
-  // Vite (Client-side)
+/**
+ * Supabase 클라이언트 초기화 전략: 지연 초기화 (Lazy Initialization)
+ * 
+ * 왜 이 방식을 사용하나요?
+ * 1. 서버 사이드(Vercel 등)에서 모듈 로드 시점에 환경 변수가 로컬 스코프에 주입되지 않았을 수 있습니다.
+ * 2. 최상단(Top-level)에서 createClient를 호출하면 환경 변수 누락 시 즉시 크래시(500 에러)가 발생합니다.
+ * 3. Proxy를 통해 실제 메서드나 속성에 접근하는 시점에 클라이언트를 생성함으로써 안정성을 확보합니다.
+ */
+
+// 1. 환경 변수 수집 유틸리티
+const getEnvValue = (key: string): string => {
   if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
     return import.meta.env[key];
   }
-  // Node.js (Server-side)
   if (typeof process !== "undefined" && process.env && process.env[key]) {
     return process.env[key];
   }
   return "";
 };
 
-// Vite의 정적 치환을 위해 명시적 참조도 병행 (Vite 권장 방식)
-// 주의: 서버 사이드에서는 import.meta.env가 없을 수 있으므로 옵셔널 체이닝 사용
-const VITE_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) || "";
-const VITE_ANON_KEY = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY) || "";
+const getSupabaseConfig = () => {
+  // Vite의 정적 치환 우선 시도
+  const vUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) || "";
+  const vKey = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY) || "";
 
-const supabaseUrl = VITE_URL || getEnvValue("VITE_SUPABASE_URL");
-const supabaseAnonKey = VITE_ANON_KEY || getEnvValue("VITE_SUPABASE_ANON_KEY");
+  const url = vUrl || getEnvValue("VITE_SUPABASE_URL");
+  const key = vKey || getEnvValue("VITE_SUPABASE_ANON_KEY");
 
-// 2. URL 유효성 검증
-const isValidUrl = (url: string): boolean => {
-  try {
-    return url.startsWith("http://") || url.startsWith("https://");
-  } catch {
-    return false;
-  }
+  return { url, key };
 };
 
-// 3. 디버깅 로그 (에러 발생 전 실행되도록 최상단 배치)
-if (typeof window !== "undefined") {
-  console.log("[Supabase Init] Detected Config:", {
-    hasUrl: !!supabaseUrl,
-    urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 10) : "none",
-    hasKey: !!supabaseAnonKey,
-  });
-}
-
-// 4. 안전한 URL 확보 (Invalid URL 에러 방지용 placeholder)
-const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : "https://missing-config.supabase.co";
+// 2. 클라이언트 인스턴스 캐시
+let _supabaseInstance: SupabaseClient | null = null;
+let _supabaseAdminInstance: SupabaseClient | null = null;
 
 /**
- * Supabase 클라이언트 인스턴스
- * URL이 잘못되어도 인스턴스 생성 시점에서 프로세스가 죽지 않도록 finalUrl을 보장합니다.
+ * 실제 Supabase 클라이언트를 생성하는 내부 함수
  */
-export const supabase = createClient(finalUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: typeof window !== "undefined",
-    persistSession: typeof window !== "undefined",
-    detectSessionInUrl: typeof window !== "undefined",
+function createLazyClient(): SupabaseClient {
+  if (_supabaseInstance) return _supabaseInstance;
+
+  const { url, key } = getSupabaseConfig();
+
+  // 최소한의 유효성 검사 (크래시 방지용 placeholder URL 제공)
+  const finalUrl = (url && (url.startsWith("http://") || url.startsWith("https://"))) 
+    ? url 
+    : "https://missing-config.supabase.co";
+
+  if (!key && typeof window !== "undefined") {
+    console.warn("[Supabase] Anon Key가 누락되었습니다. 로그인이 작동하지 않을 수 있습니다.");
+  }
+
+  _supabaseInstance = createClient(finalUrl, key || "missing-key", {
+    auth: {
+      autoRefreshToken: typeof window !== "undefined",
+      persistSession: typeof window !== "undefined",
+      detectSessionInUrl: typeof window !== "undefined",
+    },
+  });
+
+  return _supabaseInstance;
+}
+
+/**
+ * Proxy를 사용한 supabase 객체
+ * 기존의 'import { supabase } from "@/lib/supabase"' 코드를 수정하지 않고 그대로 쓸 수 있게 합니다.
+ */
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    const client = createLazyClient();
+    const value = (client as any)[prop];
+    return typeof value === "function" ? value.bind(client) : value;
   },
 });
 
 /**
  * Supabase 어드민 클라이언트 (서버 전용)
  */
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
-
-export function getSupabaseAdmin() {
-  if (supabaseAdmin) return supabaseAdmin;
+export function getSupabaseAdmin(): SupabaseClient {
+  if (_supabaseAdminInstance) return _supabaseAdminInstance;
 
   const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
-  const url = supabaseUrl || getEnvValue("VITE_SUPABASE_URL");
+  const { url } = getSupabaseConfig();
 
   if (!serviceRoleKey || !url) {
+    // 서버 사이드에서 호출되었는데 키가 없는 경우에만 에러 발생 (tRPC 핸들러에서 캐치 가능)
     throw new Error(
-      "Supabase 어드민 환경 변수가 설정되지 않았습니다. (VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY 확인)"
+      "Supabase 어드민 환경 변수가 설정되지 않았습니다. VITE_SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY를 확인하세요."
     );
   }
 
-  supabaseAdmin = createClient(url, serviceRoleKey, {
+  _supabaseAdminInstance = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   });
 
-  return supabaseAdmin;
+  return _supabaseAdminInstance;
 }

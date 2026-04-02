@@ -266,7 +266,14 @@ class SDKServer {
     const token = authHeader.split(" ")[1];
 
     // lib/supabase.ts의 Admin Client를 동적으로 가져와서 검증
-    const supabaseAdmin = getSupabaseAdmin();
+    let supabaseAdmin: ReturnType<typeof getSupabaseAdmin>;
+    try {
+      supabaseAdmin = getSupabaseAdmin();
+    } catch (e) {
+      console.error("[Auth] Supabase Admin initialization failed:", e);
+      throw ForbiddenError("Server configuration error (Supabase)");
+    }
+
     const { data: { user: authUser }, error } = await supabaseAdmin.auth.getUser(token);
 
     if (error || !authUser) {
