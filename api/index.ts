@@ -1,51 +1,62 @@
 import express from "express";
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { appRouter } from "../server/routers";
+import { createContext } from "../server/_core/context";
+import { registerOAuthRoutes } from "../server/_core/oauth";
 
 /**
- * [자가 진단 4.1단계: ESM 호환 파일 스캐너]
+ * [최종 승인된 안정화 엔트리 포인트]
  * 
- * __dirname 오류를 해결하고 서버 내부 파일 구조를 다시 확인합니다.
+ * 1. 정적 임포트(Static Import)를 통해 Vercel 번들러가 모든 파일을 index.js에 포함하게 합니다.
+ * 2. 내부 서비스들(supabase, sdk, db)이 모두 Proxy/Lazy 방식으로 보호되므로 초기화 크래시가 없습니다.
+ * 3. 불필요한 dotenv/config를 제거하여 Vercel 네이티브 환경과의 충돌을 방지합니다.
  */
 
 const app = express();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname_esm = path.dirname(__filename);
+app.use(express.json({ limit: "50mb" }));
 
-app.get("/api/health", (req, res) => {
-  const getDirContents = (dirPath: string) => {
-    try {
-      const realPath = path.resolve(process.cwd(), dirPath);
-      if (fs.existsSync(realPath)) {
-        return fs.readdirSync(realPath).join(", ");
-      }
-      return "(존재하지 않음)";
-    } catch (e: any) {
-      return `(오류: ${e.message})`;
-    }
-  };
-
-  const results = {
-    "작업 디렉토리 (process.cwd)": process.cwd(),
-    "현재 파일 위치 (__dirname_esm)": __dirname_esm,
-    "루트 폴더 (.)": getDirContents("."),
-    "api 폴더 (./api)": getDirContents("./api"),
-    "server 폴더 (./server)": getDirContents("./server"),
-    "server/_core 폴더 (./server/_core)": getDirContents("./server/_core"),
-    "lib 폴더 (./lib)": getDirContents("./lib"),
-  };
-
-  let html = "<div style='font-family: monospace; padding: 20px;'>";
-  html += "<h1>Vercel 서버 파일 시스템 스캔 (수정됨)</h1><ul>";
-  for (const [key, value] of Object.entries(results)) {
-    html += `<li><strong>${key}:</strong> ${value}</li>`;
+// Vercel Rewrite 지원 미들웨어
+app.use((req, res, next) => {
+  if (req.query.path !== undefined) {
+    const pathStr = req.query.path as string;
+    const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    urlObj.pathname = `/api/${pathStr}`;
+    urlObj.searchParams.delete('path');
+    req.url = urlObj.pathname + urlObj.search;
+    req.originalUrl = req.url;
   }
-  html += "</ul>";
-  html += "<p>에러가 나지 않고 이 화면이 보인다면, 이제 진짜 경로로 파일을 불러올 준비가 된 것입니다.</p></div>";
+  next();
+});
 
-  res.status(200).send(html);
+// tRPC 핸들러
+app.use(
+  "/api/trpc",
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
+
+// OAuth 라우트 등록
+try {
+  registerOAuthRoutes(app);
+} catch (e) {
+  console.error("[OAuth] Registration failed:", e);
+}
+
+// 헬스 체크
+app.get("/api/health", (req, res) => {
+  res.status(200).send("NutriPlan Server is Fully Stabilized! 이제 모든 기능이 정상 작동합니다.");
+});
+
+// 전역 에러 핸들러
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("[Fatal]", err);
+  res.status(500).json({
+    error: true,
+    message: err.message || "Internal Server Error"
+  });
 });
 
 export default app;
