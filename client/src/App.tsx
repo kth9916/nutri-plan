@@ -17,6 +17,7 @@ import MyPage from "./pages/MyPage";
 
 import Login from "./pages/Login";
 import UpdatePassword from "./pages/UpdatePassword";
+import DashboardLayout from "./components/DashboardLayout";
 
 /**
  * 라우트 구조:
@@ -39,6 +40,18 @@ import UpdatePassword from "./pages/UpdatePassword";
  * - ProtectedRoute 컴포넌트로 인증 로직 중앙화 가능
  * - 현재 방식은 각 페이지가 독립적으로 인증 처리하여 유연성 높음
  */
+/**
+ * 대시보드 레이아웃 래퍼
+ * 인증이 필요한 모든 대시보드 페이지에 사이드바를 적용합니다.
+ */
+function ProtectedDashboard({ component: Component, ...rest }: any) {
+  return (
+    <DashboardLayout>
+      <Component {...rest} />
+    </DashboardLayout>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -49,14 +62,30 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
 
       {/* Dashboard Routes (Auth Required) */}
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/dashboard/upload" component={Upload} />
-      <Route path="/dashboard/plans" component={MealPlans} />
-      <Route path="/dashboard/plans/:id" component={MealPlanDetail} />
-      <Route path="/dashboard/files" component={Files} />
-      <Route path="/dashboard/notifications" component={Notifications} />
-      <Route path="/dashboard/subscription" component={Subscription} />
-      <Route path="/dashboard/mypage" component={MyPage} />
+      <Route path="/dashboard">
+        {(params) => <ProtectedDashboard component={Dashboard} {...params} />}
+      </Route>
+      <Route path="/dashboard/upload">
+        {(params) => <ProtectedDashboard component={Upload} {...params} />}
+      </Route>
+      <Route path="/dashboard/plans">
+        {(params) => <ProtectedDashboard component={MealPlans} {...params} />}
+      </Route>
+      <Route path="/dashboard/plans/:id">
+        {(params) => <ProtectedDashboard component={MealPlanDetail} {...params} />}
+      </Route>
+      <Route path="/dashboard/files">
+        {(params) => <ProtectedDashboard component={Files} {...params} />}
+      </Route>
+      <Route path="/dashboard/notifications">
+        {(params) => <ProtectedDashboard component={Notifications} {...params} />}
+      </Route>
+      <Route path="/dashboard/subscription">
+        {(params) => <ProtectedDashboard component={Subscription} {...params} />}
+      </Route>
+      <Route path="/dashboard/mypage">
+        {(params) => <ProtectedDashboard component={MyPage} {...params} />}
+      </Route>
 
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
