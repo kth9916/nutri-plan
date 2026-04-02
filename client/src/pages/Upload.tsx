@@ -138,7 +138,7 @@ export default function Upload() {
       // 파일 업로드
       const { fileId } = await uploadMutation.mutateAsync({
         fileName: selectedFile.name,
-        fileContent: Buffer.from(base64, 'base64'),
+        fileContent: base64,
         fileType: selectedFile.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
 
