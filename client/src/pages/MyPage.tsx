@@ -59,13 +59,13 @@ export default function MyPage() {
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">소속 분류</p>
               <p className="font-medium text-sm px-3 py-2 bg-muted/50 rounded-lg border border-border/50">
-                {user?.workplace_category || "미설정"}
+                {user?.workplaceCategory || "미설정"}
               </p>
             </div>
             <div className="pt-4 border-t border-border/50 flex justify-between items-center">
               <span className="text-sm font-medium">현재 요금제</span>
-              <Badge variant={user?.subscription_plan === "pro" ? "default" : "secondary"} className="px-3">
-                {user?.subscription_plan === "pro" ? "Pro 플랜" : "Free 플랜"}
+              <Badge variant={user?.plan === "pro" ? "default" : "secondary"} className="px-3">
+                {user?.plan === "pro" ? "Pro 플랜" : "Free 플랜"}
               </Badge>
             </div>
           </CardContent>
@@ -146,11 +146,11 @@ export default function MyPage() {
           ) : (
             mealPlans.map((plan) => (
               <div key={plan.id} className="grid grid-cols-12 items-center p-4 hover:bg-muted/30 transition-colors">
-                <div className="col-span-3 text-sm">{format(new Date(plan.created_at), 'yyyy-MM-dd HH:mm')}</div>
+                <div className="col-span-3 text-sm">{format(new Date(plan.createdAt), 'yyyy-MM-dd HH:mm')}</div>
                 <div className="col-span-2 font-medium">{plan.year}년 {plan.month}월</div>
                 <div className="col-span-5 text-sm text-muted-foreground truncate pr-4">
-                  {plan.request_prompt ? (
-                    <span className="bg-muted px-2 py-1 rounded-md text-xs">{plan.request_prompt}</span>
+                  {plan.requestPrompt ? (
+                    <span className="bg-muted px-2 py-1 rounded-md text-xs">{plan.requestPrompt}</span>
                   ) : (
                     <span className="italic opacity-60">추가 요청사항 없음</span>
                   )}

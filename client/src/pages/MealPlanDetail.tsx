@@ -318,7 +318,7 @@ export default function MealPlanDetail() {
 
   // 식단 플랜 데이터 조회
   const { data, isLoading, refetch } = trpc.mealPlan.getById.useQuery(
-    { id: planId },
+    { planId },
     { enabled: !!planId && isAuthenticated }
   );
 
@@ -357,19 +357,8 @@ export default function MealPlanDetail() {
   const replaceMutation = trpc.mealPlan.replaceDay.useMutation({
     onSuccess: (newData, variables) => {
       // 교체 성공: 새 식단 데이터로 업데이트
-      setLocalDays((prev) =>
-        prev?.map((d) =>
-          d.id === variables.dayId
-            ? {
-                ...d,
-                meals: newData.meals as DayMeals,
-                nutritionInfo: newData.nutritionInfo as NutritionInfo,
-                status: "pending" as const,
-                approvedAt: null,
-              }
-            : d
-        ) ?? null
-      );
+      // 교체 후 서버에서 최신 데이터 다시 가져오기
+      refetch();
       setReplacingDayId(null);
       toast.success("새 식단으로 교체되었습니다.");
     },
@@ -382,7 +371,7 @@ export default function MealPlanDetail() {
   const confirmMutation = trpc.mealPlan.confirm.useMutation({
     onSuccess: () => {
       toast.success("식단이 최종 확정되었습니다! 엑셀 파일로 다운로드하세요.");
-      utils.mealPlan.getById.invalidate({ id: planId });
+      utils.mealPlan.getById.invalidate({ planId });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -390,11 +379,11 @@ export default function MealPlanDetail() {
   });
 
   const exportMutation = trpc.export.generateExcel.useMutation({
-    onSuccess: ({ downloadUrl }) => {
+    onSuccess: ({ url, fileName }) => {
       // 다운로드 링크 자동 클릭
       const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `${data?.plan.year}년_${data?.plan.month}월_식단표.xlsx`;
+      a.href = url;
+      a.download = fileName || `${data?.year}년_${data?.month}월_식단표.xlsx`;
       a.click();
       toast.success("엑셀 파일 다운로드가 시작되었습니다.");
     },
@@ -409,7 +398,7 @@ export default function MealPlanDetail() {
 
   const handleReplace = (dayId: number, dayOfMonth: number) => {
     setReplacingDayId(dayId);
-    replaceMutation.mutate({ dayId, planId, dayOfMonth });
+    replaceMutation.mutate({ dayId, planId, candidateIndex: 0, meals: null, nutritionInfo: null });
   };
 
   // 모든 일자 승인 여부 확인
@@ -424,7 +413,7 @@ export default function MealPlanDetail() {
   );
 
   const isPro = (user as { plan?: string } | null)?.plan === "pro";
-  const isConfirmed = data?.plan.status === "confirmed";
+  const isConfirmed = data?.status === "confirmed";
 
   /**
    * 달력 그리드 생성
@@ -432,10 +421,10 @@ export default function MealPlanDetail() {
    * - 7열 그리드 (일요일 시작)
    */
   const calendarGrid = useMemo(() => {
-    if (!data?.plan || !localDays) return [];
+    if (!data || !localDays) return [];
 
-    const year = data.plan.year;
-    const month = data.plan.month;
+    const year = data.year;
+    const month = data.month;
     const firstDay = new Date(year, month - 1, 1).getDay(); // 0=일, 6=토
     const daysInMonth = new Date(year, month, 0).getDate();
 
@@ -453,7 +442,7 @@ export default function MealPlanDetail() {
     }
 
     return grid;
-  }, [data?.plan, localDays]);
+  }, [data, localDays]);
 
   if (loading || !isAuthenticated) return null;
 
@@ -473,7 +462,7 @@ export default function MealPlanDetail() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold">
-                  {data?.plan.title ?? `${data?.plan.year}년 ${data?.plan.month}월 식단`}
+                  {data?.title ?? `${data?.year}년 ${data?.month}월 식단`}
                 </h1>
                 {isConfirmed ? (
                   <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">

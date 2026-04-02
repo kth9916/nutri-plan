@@ -1,5 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import {
   InsertUser,
   users,
@@ -28,7 +29,8 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const client = postgres(process.env.DATABASE_URL);
+      _db = drizzle(client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -71,7 +73,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    // PostgreSQL: onConflictDoUpdate (MySQL의 onDuplicateKeyUpdate 대체)
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
+      set: updateSet,
+    });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -116,8 +122,6 @@ export async function incrementDailyUsage(
   // Ensure record exists
   await getDailyUsage(userId, date);
 
-  // We can just query again and manually increment or use raw sql if needed.
-  // Actually, selecting and updating is fine here since traffic is low.
   const record = (await db.select().from(userDailyUsage).where(and(eq(userDailyUsage.userId, userId), eq(userDailyUsage.date, date))).limit(1))[0];
   
   await db.update(userDailyUsage)
@@ -158,17 +162,17 @@ export async function getMealPlanById(id: number, userId: number): Promise<MealP
 
 /**
  * 식단 플랜 생성
+ * PostgreSQL: .returning()으로 생성된 ID를 바로 받아옵니다.
  */
 export async function createMealPlan(data: InsertMealPlan): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(mealPlans).values(data);
-  return Number((result as any)[0]?.insertId ?? 0);
+  const result = await db.insert(mealPlans).values(data).returning({ id: mealPlans.id });
+  return result[0].id;
 }
 
 /**
  * 식단 플랜 상태 업데이트 (draft → confirmed)
- * 확정 시각도 함께 기록
  */
 export async function updateMealPlanStatus(
   id: number,
@@ -202,7 +206,6 @@ export async function getMealDaysByPlanId(mealPlanId: number): Promise<MealDay[]
 
 /**
  * 일별 식단 일괄 삽입
- * 새 식단 생성 시 한 번에 31개 이하 레코드 삽입
  */
 export async function insertMealDays(days: InsertMealDay[]): Promise<void> {
   const db = await getDb();
@@ -213,8 +216,6 @@ export async function insertMealDays(days: InsertMealDay[]): Promise<void> {
 
 /**
  * 특정 일자 식단 승인
- * - status: approved
- * - approvedAt: 현재 시각
  */
 export async function approveMealDay(id: number, mealPlanId: number): Promise<void> {
   const db = await getDb();
@@ -226,12 +227,6 @@ export async function approveMealDay(id: number, mealPlanId: number): Promise<vo
 
 /**
  * 특정 일자 식단 교체
- * - 새 meals 데이터로 업데이트
- * - status: replaced → pending (재검토 필요)
- *
- * 설계 결정: 교체 후 status를 'pending'으로 되돌리는 이유 -
- * 교체된 식단도 영양사가 다시 검토하고 승인해야 최종 확정이 가능하도록
- * 워크플로우를 강제함으로써 데이터 품질을 보장합니다.
  */
 export async function replaceMealDay(
   id: number,
@@ -255,12 +250,13 @@ export async function replaceMealDay(
 
 /**
  * 업로드 파일 메타데이터 저장
+ * PostgreSQL: .returning()으로 생성된 ID를 바로 받아옵니다.
  */
 export async function createUploadedFile(data: InsertUploadedFile): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(uploadedFiles).values(data);
-  return Number((result as any)[0]?.insertId ?? 0);
+  const result = await db.insert(uploadedFiles).values(data).returning({ id: uploadedFiles.id });
+  return result[0].id;
 }
 
 /**
@@ -335,19 +331,17 @@ export async function markAllNotificationsRead(userId: number): Promise<void> {
 
 /**
  * 구독 결제 레코드 생성 (pending 상태)
- * 토스페이먼츠 결제 요청 전 미리 생성
+ * PostgreSQL: .returning()으로 생성된 ID를 바로 받아옵니다.
  */
 export async function createSubscription(data: InsertSubscription): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(subscriptions).values(data);
-  return Number((result as any)[0]?.insertId ?? 0);
+  const result = await db.insert(subscriptions).values(data).returning({ id: subscriptions.id });
+  return result[0].id;
 }
 
 /**
  * 결제 완료 처리
- * - subscriptions 테이블: status → paid, paymentKey 저장
- * - users 테이블: plan → pro
  */
 export async function completePayment(
   orderId: string,

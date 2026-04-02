@@ -21,22 +21,10 @@ import { toast } from "sonner";
 export default function Subscription() {
   const { user, isAuthenticated, loading } = useAuth();
   const [isPaymentLoading, setIsPaymentLoading] = useState(false);
-  const [subscription, setSubscription] = useState<any>(null);
 
   // tRPC 뮤테이션
   const createOrderMutation = trpc.payment.createOrder.useMutation();
   const confirmPaymentMutation = trpc.payment.confirmPayment.useMutation();
-  const getSubscriptionQuery = trpc.payment.getSubscription.useQuery(
-    { userId: user?.id || 0 },
-    { enabled: !!user?.id }
-  );
-
-  // 구독 정보 로드
-  useEffect(() => {
-    if (getSubscriptionQuery.data) {
-      setSubscription(getSubscriptionQuery.data);
-    }
-  }, [getSubscriptionQuery.data]);
 
   const handlePayment = async () => {
     try {
@@ -68,7 +56,8 @@ export default function Subscription() {
       }
 
       // 실제 포트원 SDK 로드 및 결제
-      const { PortOne } = await import("@portone/browser-sdk/v2");
+      const portoneModule = await import("@portone/browser-sdk/v2") as any;
+      const PortOne = portoneModule.PortOne || portoneModule.default;
 
       // 포트원 결제 요청
       const response = await PortOne.requestPayment({
@@ -115,21 +104,9 @@ export default function Subscription() {
     }
   };
 
-  // 결제 성공/실패 URL 파라미터 처리
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const orderId = params.get("orderId");
-
-    if (orderId) {
-      // 결제 완료 후 구독 정보 새로고침
-      getSubscriptionQuery.refetch();
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
-
   if (loading || !isAuthenticated) return null;
 
-  const isPro = subscription?.planType === "pro";
+  const isPro = user?.plan === "pro";
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,14 +131,6 @@ export default function Subscription() {
                   <p className="text-sm text-muted-foreground">월간 식단 생성 횟수</p>
                   <p className="text-2xl font-bold">{isPro ? "10회" : "1회"}</p>
                 </div>
-                {isPro && subscription?.expiresAt && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">구독 만료일</p>
-                    <p className="text-lg font-semibold">
-                      {new Date(subscription.expiresAt).toLocaleDateString("ko-KR")}
-                    </p>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>

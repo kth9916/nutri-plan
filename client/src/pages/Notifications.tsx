@@ -104,7 +104,7 @@ export default function Notifications() {
                       : "bg-card/50 border-border/50 opacity-70 hover:opacity-100"
                   }`}
                   onClick={() => {
-                    if (!notif.isRead) markReadMutation.mutate({ id: notif.id });
+                    if (!notif.isRead) markReadMutation.mutate({ notificationId: notif.id });
                   }}
                 >
                   <div className={`w-9 h-9 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>

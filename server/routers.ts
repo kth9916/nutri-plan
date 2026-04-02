@@ -280,7 +280,7 @@ const notificationRouter = router({
   markRead: protectedProcedure
     .input(z.object({ notificationId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await markNotificationRead(input.notificationId);
+      await markNotificationRead(input.notificationId, ctx.user.id);
       return { success: true };
     }),
 
@@ -318,11 +318,11 @@ const paymentRouter = router({
       const orderId = `order-${ctx.user.id}-${Date.now()}`;
       const subscriptionId = await createSubscription({
         userId: ctx.user.id,
-        planType: input.planType,
-        amount: input.amount,
+        plan: input.planType,
+        amount: String(input.amount),
         orderId,
         status: "pending",
-      }) as any;
+      });
 
       return { orderId, subscriptionId };
     }),
