@@ -3,15 +3,35 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Calendar, RefreshCw, AlertCircle, FileText, Settings, User } from "lucide-react";
+import { Calendar, RefreshCw, AlertCircle, FileText, Settings, User, Check } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 export default function MyPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const utils = trpc.useUtils();
   
   const { data: usage, isLoading: usageLoading } = trpc.usage.getDailyStats.useQuery();
   const { data: mealPlans, isLoading: plansLoading } = trpc.mealPlan.list.useQuery();
+
+  const updateCategory = trpc.auth.updateCategory.useMutation({
+    onSuccess: () => {
+      toast.success("소속 분류가 업데이트되었습니다.");
+      utils.auth.me.invalidate();
+      if (refreshUser) refreshUser();
+    },
+    onError: (err) => {
+      toast.error(`업데이트 실패: ${err.message}`);
+    }
+  });
 
   if (usageLoading || plansLoading) {
     return (
@@ -27,13 +47,17 @@ export default function MyPage() {
   const generationPercentage = usage ? Math.min(100, Math.round((usage.usedGenerations / usage.maxGenerations) * 100)) : 0;
   const exchangePercentage = usage ? Math.min(100, Math.round((usage.usedExchanges / usage.maxExchanges) * 100)) : 0;
 
+  const categories = ["산업체", "학교", "병원", "군부대", "기타"];
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
-        <p className="text-muted-foreground mt-2">
-          내 계정 정보와 오늘 하루 AI 한도 및 사용내역을 확인하세요.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
+          <p className="text-muted-foreground mt-2">
+            내 계정 정보와 오늘 하루 AI 한도 및 사용내역을 확인하세요.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -56,11 +80,27 @@ export default function MyPage() {
               </div>
             </div>
             
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">소속 분류</p>
-              <p className="font-medium text-sm px-3 py-2 bg-muted/50 rounded-lg border border-border/50">
-                {user?.workplaceCategory || "미설정"}
-              </p>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground font-medium">소속 분류 설정</p>
+              <Select 
+                defaultValue={user?.workplaceCategory || undefined} 
+                onValueChange={(value) => updateCategory.mutate({ workplaceCategory: value })}
+                disabled={updateCategory.isPending}
+              >
+                <SelectTrigger className="w-full bg-muted/50 border-border/50">
+                  <SelectValue placeholder="소속을 선택해주세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {updateCategory.isPending && (
+                <p className="text-[10px] text-primary animate-pulse ml-1">저장 중...</p>
+              )}
             </div>
             <div className="pt-4 border-t border-border/50 flex justify-between items-center">
               <span className="text-sm font-medium">현재 요금제</span>

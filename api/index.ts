@@ -65,6 +65,13 @@ const appRouter = router({
   auth: router({
     me: publicProcedure.query(({ ctx }) => ctx.user || null),
     logout: publicProcedure.mutation(async ({ ctx }) => ({ success: true })),
+    updateCategory: protectedProcedure
+      .input(z.object({ workplaceCategory: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const db = getInlinedDb();
+        if (db) await db.update(users).set({ workplaceCategory: input.workplaceCategory }).where(eq(users.id, ctx.user.id));
+        return { success: true };
+      }),
   }),
   mealPlan: router({
     list: protectedProcedure.query(async ({ ctx }) => {
